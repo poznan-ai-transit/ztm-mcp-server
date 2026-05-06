@@ -49,3 +49,11 @@ python examples/05_vehicle_dictionary.py
 Base URL: `https://www.ztm.poznan.pl/pl/dla-deweloperow/`
 
 Data source: [ZTM Poznań developer portal](https://www.ztm.poznan.pl/otwarte-dane/dla-deweloperow/)
+
+## Documentation map
+
+| Document | Purpose |
+|---|---|
+| [docs/01-product-goal.md](docs/01-product-goal.md) | Project description and product goal |
+| [docs/02-mvp.md](docs/02-mvp.md) | MVP boundaries, mock phase, and core behavior |
+| [docs/03-requirements.md](docs/03-requirements.md) | Functional and non-functional requirements for the MVP |
