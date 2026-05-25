@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import threading
 from typing import Any, Protocol
 from immutabledict import immutabledict
+from collections.abc import Mapping
 
 
 class ReadOnlyStaticStorage(Protocol):
@@ -55,8 +56,9 @@ class StaticStorage:
         self._initialized = True
 
     def set_static_gtfs(self, data: dict[str, Any]) -> None:
+        new_data = self._freeze(data)
         with self._lock:
-            self._data = self._freeze(data)
+            self._data = new_data
 
     def _freeze(self, value: Any) -> Any:
         if isinstance(value, immutabledict):
@@ -65,6 +67,14 @@ class StaticStorage:
             return immutabledict({key: self._freeze(item) for key, item in value.items()})
         if isinstance(value, (list, tuple)):
             return tuple(self._freeze(item) for item in value)
+        return value
+    
+    @classmethod
+    def to_plain(cls, value):
+        if isinstance(value, Mapping):
+            return {key: cls.to_plain(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [cls.to_plain(item) for item in value]
         return value
 
     @contextmanager
