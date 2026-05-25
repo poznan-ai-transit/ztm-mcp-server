@@ -2,36 +2,60 @@ from __future__ import annotations
 
 import csv
 import io
+from pathlib import Path
 import threading
 import time
 import zipfile
 from datetime import datetime, timedelta
 from typing import Any
+import requests
 
-from services.static_storage import StaticStorage
-
+from services.static_storage import WriteOnlyStaticStorage
 
 class ZTMService:
-    def __init__(self, api_client: Any | None = None):
-        self._api_client = api_client
+    _instance = None
+    _instance_lock = threading.Lock()
 
-    def start_daily_refresh(self, storage: StaticStorage) -> None:
-        def _runner() -> None:
-            storage.set_static_gtfs(self.get_static_gtfs())
+    @classmethod
+    def instance(cls) -> "ZTMService":
+        return cls()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if getattr(self, "_initialized", False):
+            return
+        self._initialized = True
+
+    def start_daily_refresh(self, storage: WriteOnlyStaticStorage) -> None:
+        def _runner():
+            backoff = 60
             while True:
-                sleep_for = self._seconds_until_next_six_am(datetime.now())
-                time.sleep(sleep_for)
-                storage.set_static_gtfs(self.get_static_gtfs())
+                try:
+                    storage.set_static_gtfs(self.get_static_gtfs())
+                    backoff = 60
+                    time.sleep(self._seconds_until_next_six_am(datetime.now()))
+                except Exception:
+                    # log exception
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 1800)
 
         thread = threading.Thread(target=_runner, name="ztm-static-refresh", daemon=True)
         thread.start()
 
     def get_static_gtfs(self) -> dict[str, Any]:
         # mock data in the same shape as the real API (zip with GTFS files)
-        zf = self._mock_gtfs_zip()
-        stops = self._read_csv_from_zip(zf, "stops.txt")
-        routes = self._read_csv_from_zip(zf, "routes.txt")
-        stop_times = self._read_csv_from_zip(zf, "stop_times.txt")
+        
+        with self._mock_gtfs_zip() as zf:
+            stops = self._read_csv_from_zip(zf, "stops.txt")
+            routes = self._read_csv_from_zip(zf, "routes.txt")
+            stop_times = self._read_csv_from_zip(zf, "stop_times.txt")
 
         return {
             "stops": stops,
@@ -73,34 +97,13 @@ class ZTMService:
         if next_run <= now:
             next_run = next_run + timedelta(days=1)
         return (next_run - now).total_seconds()
-
-    def _mock_gtfs_payload(self) -> tuple[str, str, str]:
-        stops_csv = (
-            "stop_id,stop_name,stop_lat,stop_lon\n"
-            "4317,POZNAN GLOWNY,52.4019,16.9119\n"
-            "3002,WLADYSLAWA,52.3962,16.9081\n"
-            "1807,ZABINKO,52.3100,16.8740\n"
-        )
-        routes_csv = (
-            "route_id,agency_id,route_short_name,route_long_name,route_type\n"
-            "PKS,16,PKS,ZABINKO - POZNAN GLOWNY,3\n"
-            "1,2,1,JUNIKOWO - FRANOWO,0\n"
-        )
-        stop_times_csv = (
-            "trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,"
-            "pickup_type,drop_off_type\n"
-            "1_765177_Y,05:38:00,05:38:00,4317,0,POZNAN GLOWNY,0,1\n"
-            "1_765177_Y,05:43:00,05:43:00,3002,1,POZNAN GLOWNY,0,0\n"
-            "1_765177_Y,06:30:00,06:30:00,1807,2,POZNAN GLOWNY,1,0\n"
-        )
-        return stops_csv, routes_csv, stop_times_csv
+    
+    
+    def _fetch_static_gtfs_zip(self, gtfs_endpoint: str = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile") -> zipfile.ZipFile:
+        resp = requests.get(gtfs_endpoint, timeout=30)
+        resp.raise_for_status()
+        return zipfile.ZipFile(io.BytesIO(resp.content))
 
     def _mock_gtfs_zip(self) -> zipfile.ZipFile:
-        stops_csv, routes_csv, stop_times_csv = self._mock_gtfs_payload()
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("stops.txt", stops_csv)
-            zf.writestr("routes.txt", routes_csv)
-            zf.writestr("stop_times.txt", stop_times_csv)
-        buffer.seek(0)
-        return zipfile.ZipFile(buffer)
+        zip_path = Path(__file__).resolve().parents[1] / "mock_data" / "mock_data.zip"
+        return zipfile.ZipFile(zip_path)

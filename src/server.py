@@ -1,29 +1,41 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from fastmcp import FastMCP
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
-from services.static_storage import StaticStorage
+from services.static_storage import ReadOnlyStaticStorage, StaticStorage
 from services.ztm_service import ZTMService
 
 mcp = FastMCP("ztm-poznan")
-ztm_service = ZTMService()
-static_storage = StaticStorage()
+ztm_service = ZTMService.instance()
+static_storage: ReadOnlyStaticStorage = StaticStorage.instance()
+
+
+def _to_plain(value):
+    if isinstance(value, Mapping):
+        return {key: _to_plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_plain(item) for item in value]
+    return value
 
 
 @mcp.tool()
-def echo(tekst: str) -> str:
+def echo(text: str) -> str:
     """Test tool — returns input."""
-    return tekst
+    return text
 
 
 @mcp.tool()
 def list_routes_and_stops() -> dict[str, list[dict[str, str]]]:
     """List all routes and stops from static GTFS data."""
+    with static_storage.read_lock():
+        routes = static_storage.get_routes()
+        stops = static_storage.get_stops()
     return {
-        "routes": static_storage.get_routes(),
-        "stops": static_storage.get_stops(),
+        "routes": _to_plain(routes),
+        "stops": _to_plain(stops),
     }
 
 
