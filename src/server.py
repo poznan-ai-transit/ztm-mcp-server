@@ -12,15 +12,6 @@ mcp = FastMCP("ztm-poznan")
 ztm_service = ZTMService.instance()
 static_storage: ReadOnlyStaticStorage = StaticStorage.instance()
 
-
-def _to_plain(value):
-    if isinstance(value, Mapping):
-        return {key: _to_plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_to_plain(item) for item in value]
-    return value
-
-
 @mcp.tool()
 def echo(text: str) -> str:
     """Test tool — returns input."""
@@ -34,8 +25,8 @@ def list_routes_and_stops() -> dict[str, list[dict[str, str]]]:
         routes = static_storage.get_routes()
         stops = static_storage.get_stops()
     return {
-        "routes": _to_plain(routes),
-        "stops": _to_plain(stops),
+        "routes": StaticStorage.to_plain(routes),
+        "stops": StaticStorage.to_plain(stops),
     }
 
 
