@@ -1,3 +1,4 @@
 gtfs-realtime-bindings==2.0.0
 requests==2.33.1
 fastmcp>=2.0.0
+immutabledict==4.3.1
