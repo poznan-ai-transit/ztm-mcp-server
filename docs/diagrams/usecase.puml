@@ -1,0 +1,66 @@
+@startuml ztm-mcp-use-case
+' Use case diagram for the ZTM Poznań MCP server.
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam shadowing false
+skinparam defaultFontName "Helvetica"
+skinparam usecase {
+  BackgroundColor<<MVP>>      #9FE1CB
+  BorderColor<<MVP>>          #0F6E56
+  BackgroundColor<<PostMVP>>  #D3D1C7
+  BorderColor<<PostMVP>>      #5F5E5A
+  BackgroundColor<<System>>   #9FE1CB
+  BorderColor<<System>>       #0F6E56
+}
+
+actor "Commuter"        as user
+actor "AI agent\n(Claude / ChatGPT / Copilot)" as agent
+
+rectangle "ztm-mcp-server" {
+  usecase "Query departures\nby line and stop"   as UC1 <<MVP>>
+  usecase "List routes and stops"                as UC2 <<MVP>>
+  usecase "Request missing context"              as UC3 <<MVP>>
+  usecase "Reject non-Poznań queries"            as UC4 <<MVP>>
+  usecase "Explain capabilities"                 as UC5 <<MVP>>
+  usecase "Refresh static GTFS\n(daily snapshot)" as UC6 <<System>>
+  usecase "Check real-time delays"               as UC7 <<PostMVP>>
+  usecase "Track vehicle positions"              as UC8 <<PostMVP>>
+  usecase "View service alerts"                  as UC9 <<PostMVP>>
+}
+
+actor "ZTM Poznań\nOpen Data API" as ztm  <<external>>
+actor "Daily scheduler\n(06:00)"  as sched <<system>>
+
+' Human <-> agent (the human never touches the server directly)
+user -- agent : natural language
+
+' Agent calls MCP tools
+agent --> UC1
+agent --> UC2
+agent --> UC4
+agent --> UC5
+agent --> UC7
+agent --> UC8
+agent --> UC9
+
+' Behavior rules from docs/03-requirements.md
+UC1 ..> UC3 : <<include>>
+UC1 ..> UC4 : <<include>>
+UC1 ..> UC6 : <<include>>
+
+' Background refresh job (src/services/ztm_service.py: start_daily_refresh)
+sched --> UC6
+UC6  --> ztm : download GTFS zip
+UC7  --> ztm : poll trip_updates.pb
+UC8  --> ztm : poll vehicle_positions.pb
+UC9  --> ztm : poll feeds.pb
+
+legend bottom right
+  |= Color |= Meaning |
+  | <#9FE1CB> | MVP scope |
+  | <#D3D1C7> | Post-MVP |
+endlegend
+
+@enduml

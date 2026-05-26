@@ -1,0 +1,44 @@
+name: Generate PlantUML Diagrams
+on:
+  push:
+    paths:
+      - "**.puml"
+
+jobs:
+  plantuml:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for git diff to work correctly
+
+      - name: Get changed UML files
+        id: getfile
+        run: |
+          FILES=$(git diff --name-only HEAD^ HEAD | grep '\.puml$' | xargs)
+          echo "files=${FILES}" >> $GITHUB_OUTPUT
+          echo "Found files: ${FILES}"
+
+      - name: Install Java & PlantUML
+        if: steps.getfile.outputs.files != ''
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y default-jre graphviz wget
+          wget -q https://github.com/plantuml/plantuml/releases/latest/download/plantuml.jar \
+            -O /usr/local/bin/plantuml.jar
+
+      - name: Generate SVG Diagrams
+        if: steps.getfile.outputs.files != ''
+        run: |
+          java -jar /usr/local/bin/plantuml.jar \
+            -v -tsvg ${{ steps.getfile.outputs.files }}
+
+      - name: Push Local Changes
+        if: steps.getfile.outputs.files != ''
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Generate SVG files for PlantUML diagrams"
+          branch: ${{ github.ref_name }}
