@@ -1,15 +1,30 @@
 from __future__ import annotations
-
-from collections.abc import Mapping
+from collections.abc import Mapping, AsyncIterator
+from typing import Any, Generator
 from fastmcp import FastMCP
+from fastmcp.server.lifespan import lifespan
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
 from services.static_storage import ReadOnlyStaticStorage, StaticStorage, WriteOnlyStaticStorage
 from services.ztm_service import ZTMService
 
-mcp = FastMCP("ztm-poznan")
-ztm_service = ZTMService.instance()
+@lifespan
+async def ztm_service_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+    """Initializes lifespan for ztm_service and static_storage"""
+    ztm_service: ZTMService = ZTMService.instance()
+    static_storage: WriteOnlyStaticStorage = StaticStorage.instance()
+    ztm_service.start_daily_refresh(static_storage)
+
+    yield {"static_storage" :static_storage}
+
+    # ztm.service.stop_daily_refresh()
+
+mcp: FastMCP = FastMCP(
+    "ztm-poznan",
+    strict_input_validation=True,
+    mask_error_details=True,
+    lifespan=ztm_service_lifespan)
 
 @mcp.tool()
 def echo(text: str) -> str:
@@ -31,8 +46,6 @@ def list_routes_and_stops() -> dict[str, list[dict[str, str]]]:
 
 
 if __name__ == "__main__":
-    static_storage: WriteOnlyStaticStorage = StaticStorage.instance()
-    ztm_service.start_daily_refresh(static_storage)
     mcp.run(
         transport="sse",
         host="0.0.0.0",
