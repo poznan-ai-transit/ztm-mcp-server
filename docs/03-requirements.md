@@ -10,7 +10,7 @@ It is consistent with `docs/01-product-goal.md` and `docs/02-mvp.md`.
 - Supported interaction: user asks transit questions in natural language, agent calls MCP tools.
 
 ## Assumptions
-- The first implementation phase uses mock tools and deterministic hardcoded datasets.
+- The first implementation phase uses mock tools and deterministic hardcoded datasets, structured to allow a swift transition to the live API in subsequent sprints.
 - Any model/agent may be used, but tool contracts must stay model-agnostic.
 - Real-time feeds, routing, and external map integration are outside MVP.
 
@@ -50,6 +50,20 @@ Mock tools must expose stable input/output schema to enable testing with differe
 **Acceptance criteria**
 - Same input returns the same output in repeated runs.
 - Tool output includes enough fields for rendering a user answer (at least line, stop, departures).
+
+### FR-6: Directory Lookup (List Routes and Stops)
+The agent must be able to return baseline information about available resources (lines and stops) to guide the user's queries.
+
+**Acceptance criteria**
+- When a user asks for a list of available lines or stops, the agent queries the mock server directory.
+- The agent successfully returns a structured summary of supported routes and stops in Poznań.
+
+### FR-7: Static GTFS Data Refresh (System-level)
+The system must support an automated background mechanism to refresh the local static dataset from an external source to maintain data relevance.
+
+**Acceptance criteria**
+- The system executes an automated daily task (e.g., at 06:00) to download the latest static GTFS snapshot from the ZTM Open Data API.
+- The downloaded data seamlessly replaces the existing local static dataset without causing downtime for the mock tools.
 
 ## Non-Functional Requirements (NFR)
 
@@ -93,3 +107,4 @@ The MVP should allow basic debugging of user query and tool call flow.
 - Route planning/path-finding algorithms.
 - Google Maps integration.
 - Accessibility extensions beyond basic mock fields.
+- Specific transit features like low-floor vehicle identification (planned for Phase 2).
