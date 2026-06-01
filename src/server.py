@@ -47,13 +47,16 @@ def list_routes_and_stops() -> dict[str, list[dict[str, str]]]:
 
 if __name__ == "__main__":
     mcp.run(
-        transport="sse",
+        transport="http",
         host="0.0.0.0",
         port=8000,
+        stateless_http=True,
         middleware=[Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])],
     )
 
 # HOW TO TEST:
-# run npx @modelcontextprotocol/inspector (node.js has to be installed)
-# in url set http://localhost:8000/sse and set transport type: SSE
-# then connect
+# run npx @modelcontextprotocol/inspector
+# In MCP Inspector set:
+# Transport Type: Streamable HTTP
+# URL: http://localhost:8000/mcp
+# Stateless HTTP is enabled to avoid missing session ID errors.
