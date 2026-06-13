@@ -38,10 +38,6 @@ class ZTMStaticSchedule:
         with self._lock:
             yield
 
-    def get_snapshot(self) -> dict[str, Any]:
-        with self._lock:
-            return self._data
-
     def get_static_gtfs(self) -> dict[str, Any]:
         with self._lock:
             return self._data
