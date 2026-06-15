@@ -1,8 +1,10 @@
 from __future__ import annotations
-from _thread import LockType, RLock
-from contextlib import contextmanager
+
 import threading
-from typing import Any, Generator, Any
+from _thread import LockType
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Any
 
 
 class ZTMStaticSchedule:
@@ -21,7 +23,7 @@ class ZTMStaticSchedule:
                     cls._instance._data = {}
                     cls._instance._lock = threading.RLock()
         return cls._instance
-    
+
     def __init__(self) -> None:
         if getattr(self, "_initialized", False):
             return

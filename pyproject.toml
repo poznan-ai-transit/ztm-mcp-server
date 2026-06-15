@@ -1,0 +1,45 @@
+[project]
+name = "ztm-mcp-server"
+version = "0.1.0"
+description = "MCP server exposing ZTM Poznań public-transport open data."
+requires-python = ">=3.10"
+
+# --------------------------------------------------------------------------- #
+# Ruff — linter + formatter
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import ordering)
+    "UP",  # pyupgrade (modern syntax)
+    "B",   # flake8-bugbear (likely bugs)
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach into singleton internals and underscore-prefixed helpers on purpose.
+"tests/**" = ["SLF001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["services", "server"]
+
+# --------------------------------------------------------------------------- #
+# pytest
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+# `services` and `server` are imported as top-level modules (see
+# `from services.static_storage import ...`), so the import root is `src/`.
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: parses or freezes the full mock dataset; deselect with `-m 'not slow'`",
+]

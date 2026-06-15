@@ -1,7 +1,7 @@
 # resources.py
 from __future__ import annotations
 
-from fastmcp import FastMCP, Context
+from fastmcp import Context, FastMCP
 
 from services.ztm_static_schedule import ZTMStaticSchedule
 
