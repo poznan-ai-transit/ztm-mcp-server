@@ -4,8 +4,8 @@ import threading
 from _thread import LockType
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
 from difflib import SequenceMatcher
+from typing import Any
 
 
 class ZTMStaticSchedule:
@@ -109,7 +109,7 @@ class ZTMStaticSchedule:
                 for score, stop in matches[:limit]
                 if score > 0.3
             ]
-        
+
     def search_routes(
         self,
         query: str,
