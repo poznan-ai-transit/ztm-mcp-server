@@ -4,6 +4,7 @@ import threading
 from _thread import LockType
 from collections.abc import Generator
 from contextlib import contextmanager
+from difflib import SequenceMatcher
 from typing import Any
 
 
@@ -74,3 +75,63 @@ class ZTMStaticSchedule:
     def get_stop_times_for_stop(self, stop_id: str) -> list[dict[str, str]]:
         with self._lock:
             return self._indexes().get("stop_times_by_stop_id", {}).get(stop_id, [])
+
+    def search_stops(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[dict[str, str]]:
+        query = query.lower().strip()
+
+        with self._lock:
+            stops = self.get_stops()
+
+            matches = []
+
+            for stop in stops:
+                stop_name = stop.get("stop_name", "").lower()
+
+                if query in stop_name:
+                    score = 1.0
+                else:
+                    score = SequenceMatcher(
+                        None,
+                        query,
+                        stop_name,
+                    ).ratio()
+
+                matches.append((score, stop))
+
+            matches.sort(key=lambda x: x[0], reverse=True)
+
+            return [stop for score, stop in matches[:limit] if score > 0.3]
+
+    def search_routes(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[dict[str, str]]:
+        query = query.lower().strip()
+
+        with self._lock:
+            routes = self.get_routes()
+
+            matches = []
+
+            for route in routes:
+                route_name = route.get("route_short_name", "").lower()
+                route_long = route.get("route_long_name", "").lower()
+
+                if query in route_name or query in route_long:
+                    score = 1.0
+                else:
+                    score = max(
+                        SequenceMatcher(None, query, route_name).ratio(),
+                        SequenceMatcher(None, query, route_long).ratio(),
+                    )
+
+                matches.append((score, route))
+
+            matches.sort(key=lambda x: x[0], reverse=True)
+
+            return [route for score, route in matches[:limit] if score > 0.3]
