@@ -13,6 +13,7 @@ def echo(text: str) -> str:
     """Test tool — returns input."""
     return text
 
+
 @mcp_tools.tool()
 def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
     """
@@ -25,6 +26,7 @@ def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
     """
     schedule: ZTMStaticSchedule = ZTMStaticSchedule.instance()
     return schedule.search_stops(query, limit)
+
 
 @mcp_tools.tool()
 def search_routes(query: str, limit: int = 10) -> list[dict[str, str]]:

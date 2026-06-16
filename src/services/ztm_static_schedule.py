@@ -104,11 +104,7 @@ class ZTMStaticSchedule:
 
             matches.sort(key=lambda x: x[0], reverse=True)
 
-            return [
-                stop
-                for score, stop in matches[:limit]
-                if score > 0.3
-            ]
+            return [stop for score, stop in matches[:limit] if score > 0.3]
 
     def search_routes(
         self,
@@ -138,8 +134,4 @@ class ZTMStaticSchedule:
 
             matches.sort(key=lambda x: x[0], reverse=True)
 
-            return [
-                route
-                for score, route in matches[:limit]
-                if score > 0.3
-            ]
+            return [route for score, route in matches[:limit] if score > 0.3]
