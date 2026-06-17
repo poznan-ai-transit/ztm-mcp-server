@@ -1,0 +1,35 @@
+# This is a test configuration file for PromptFoo, which defines the providers, prompts, and tests to be executed.
+# usage (in the tests directory):
+# npx promptfoo eval --no-cache -o results.json
+
+providers:
+  - id: openai:gpt-4.1-mini
+    config:
+      apiBaseUrl: https://openrouter.ai/api/v1
+      apiKey: '{{env.OPENROUTER_API_KEY}}'
+      mcp:
+        enabled: true
+        server:
+          url: http://localhost:8000/mcp
+
+prompts:
+  - 'You are a helpful assistant. You must use the tools available to answer the question. {{question}}'
+
+tests:
+  - vars:
+      question: 'List the names of every tool or function you currently have access to.'
+    assert:
+      - type: contains-all
+        value: ['search_stops', 'search_routes']
+
+  - vars:
+      question: 'Check if a stop called "Rondo Kaponiera" exists.'
+    assert:
+      - type: contains
+        value: 'MCP Tool Result (search_stops)'
+
+  - vars:
+      question: 'Check if a route with a number 24 exists.'
+    assert:
+      - type: contains
+        value: 'MCP Tool Result (search_routes)'

@@ -1,0 +1,627 @@
+{
+  "evalId": "eval-JxZ-2026-06-17T07:12:24",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-06-17T07:12:24.361Z",
+    "prompts": [
+      {
+        "id": "a3f60e84d1a9583b75bdb47a1a9f8f9218d8df9e7fb1e8fa3dcd4cad0a63f7fb",
+        "raw": "You are a helpful assistant. You must use the tools available to answer the question. {{question}}",
+        "label": "You are a helpful assistant. You must use the tools available to answer the question. {{question}}",
+        "provider": "openai:gpt-4.1-mini",
+        "metrics": {
+          "score": 3,
+          "testPassCount": 3,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 3,
+          "assertFailCount": 0,
+          "totalLatencyMs": 1768,
+          "tokenUsage": {
+            "prompt": 543,
+            "completion": 110,
+            "cached": 0,
+            "total": 653,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "namedScoreWeights": {},
+          "cost": 0.0003932
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0.00018,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains-all",
+                "value": [
+                  "search_stops",
+                  "search_routes"
+                ]
+              }
+            }
+          ]
+        },
+        "id": "98e96033-e751-4d6b-9ba3-2c9c3ca57dcc",
+        "latencyMs": 567,
+        "namedScores": {},
+        "prompt": {
+          "raw": "You are a helpful assistant. You must use the tools available to answer the question. List the names of every tool or function you currently have access to.",
+          "label": "You are a helpful assistant. You must use the tools available to answer the question. {{question}}",
+          "config": {}
+        },
+        "promptId": "a3f60e84d1a9583b75bdb47a1a9f8f9218d8df9e7fb1e8fa3dcd4cad0a63f7fb",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-4.1-mini",
+          "label": ""
+        },
+        "response": {
+          "output": "I currently have access to the following tools or functions:\n\n1. functions.echo - Test tool that returns the input text.\n2. functions.search_stops - Search transit stops by name.\n3. functions.search_routes - Search routes by number or name.\n4. multi_tool_use.parallel - Use multiple functions tools simultaneously in parallel.",
+          "tokenUsage": {
+            "total": 249,
+            "prompt": 182,
+            "completion": 67,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0
+            }
+          },
+          "cached": false,
+          "latencyMs": 567,
+          "finishReason": "stop",
+          "cost": 0.00018,
+          "guardrails": {
+            "flagged": false
+          },
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "access-control-allow-origin": "*",
+                "access-control-expose-headers": "X-Generation-Id,cf-ray",
+                "cf-ray": "[REDACTED]",
+                "connection": "keep-alive",
+                "content-type": "application/json",
+                "date": "Wed, 17 Jun 2026 07:12:25 GMT",
+                "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+                "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+                "server": "cloudflare",
+                "transfer-encoding": "chunked",
+                "x-content-type-options": "nosniff",
+                "x-generation-id": "gen-1781680344-YhueSIYRJeEC5vy85GtI"
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "question": "List the names of every tool or function you currently have access to."
+          },
+          "assert": [
+            {
+              "type": "contains-all",
+              "value": [
+                "search_stops",
+                "search_routes"
+              ]
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "tokenUsage": {
+          "prompt": 182,
+          "completion": 67,
+          "cached": 0,
+          "total": 249,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "List the names of every tool or function you currently have access to."
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Generation-Id,cf-ray",
+              "cf-ray": "[REDACTED]",
+              "connection": "keep-alive",
+              "content-type": "application/json",
+              "date": "Wed, 17 Jun 2026 07:12:25 GMT",
+              "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+              "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+              "server": "cloudflare",
+              "transfer-encoding": "chunked",
+              "x-content-type-options": "nosniff",
+              "x-generation-id": "gen-1781680344-YhueSIYRJeEC5vy85GtI"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0.00011120000000000002,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "MCP Tool Result (search_stops)"
+              }
+            }
+          ]
+        },
+        "id": "95693231-2c49-43e7-80e2-266b5e456464",
+        "latencyMs": 633,
+        "namedScores": {},
+        "prompt": {
+          "raw": "You are a helpful assistant. You must use the tools available to answer the question. Check if a stop called \"Rondo Kaponiera\" exists.",
+          "label": "You are a helpful assistant. You must use the tools available to answer the question. {{question}}",
+          "config": {}
+        },
+        "promptId": "a3f60e84d1a9583b75bdb47a1a9f8f9218d8df9e7fb1e8fa3dcd4cad0a63f7fb",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-4.1-mini",
+          "label": ""
+        },
+        "response": {
+          "output": "MCP Tool Result (search_stops): [{\"type\":\"text\",\"text\":\"[{\\\"stop_id\\\":\\\"3284\\\",\\\"stop_code\\\":\\\"RKAP46\\\",\\\"stop_name\\\":\\\"Rondo Kaponiera\\\",\\\"stop_lat\\\":\\\"52.4077730000\\\",\\\"stop_lon\\\":\\\"16.9132030000\\\",\\\"zone_id\\\":\\\"A\\\"}]\"}]",
+          "tokenUsage": {
+            "total": 206,
+            "prompt": 182,
+            "completion": 24,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0
+            }
+          },
+          "cached": false,
+          "latencyMs": 633,
+          "finishReason": "tool_calls",
+          "cost": 0.00011120000000000002,
+          "guardrails": {
+            "flagged": false
+          },
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "access-control-allow-origin": "*",
+                "access-control-expose-headers": "X-Generation-Id,cf-ray",
+                "cf-ray": "[REDACTED]",
+                "connection": "keep-alive",
+                "content-type": "application/json",
+                "date": "Wed, 17 Jun 2026 07:12:25 GMT",
+                "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+                "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+                "server": "cloudflare",
+                "transfer-encoding": "chunked",
+                "x-content-type-options": "nosniff",
+                "x-generation-id": "gen-1781680344-gTuUdTgjSHnwt2nZoGuj"
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "question": "Check if a stop called \"Rondo Kaponiera\" exists."
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "MCP Tool Result (search_stops)"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "tokenUsage": {
+          "prompt": 182,
+          "completion": 24,
+          "cached": 0,
+          "total": 206,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "Check if a stop called \"Rondo Kaponiera\" exists."
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Generation-Id,cf-ray",
+              "cf-ray": "[REDACTED]",
+              "connection": "keep-alive",
+              "content-type": "application/json",
+              "date": "Wed, 17 Jun 2026 07:12:25 GMT",
+              "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+              "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+              "server": "cloudflare",
+              "transfer-encoding": "chunked",
+              "x-content-type-options": "nosniff",
+              "x-generation-id": "gen-1781680344-gTuUdTgjSHnwt2nZoGuj"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0.00010200000000000001,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "MCP Tool Result (search_routes)"
+              }
+            }
+          ]
+        },
+        "id": "73f8d371-9937-4fc3-ae6c-c9c75e0e6397",
+        "latencyMs": 568,
+        "namedScores": {},
+        "prompt": {
+          "raw": "You are a helpful assistant. You must use the tools available to answer the question. Check if a route with a number 24 exists.",
+          "label": "You are a helpful assistant. You must use the tools available to answer the question. {{question}}",
+          "config": {}
+        },
+        "promptId": "a3f60e84d1a9583b75bdb47a1a9f8f9218d8df9e7fb1e8fa3dcd4cad0a63f7fb",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-4.1-mini",
+          "label": ""
+        },
+        "response": {
+          "output": "MCP Tool Result (search_routes): [{\"type\":\"text\",\"text\":\"[{\\\"route_id\\\":\\\"124\\\",\\\"agency_id\\\":\\\"2\\\",\\\"route_short_name\\\":\\\"124\\\",\\\"route_long_name\\\":\\\"SAFONY - INSTYTUT TECHNOLOGICZNO-PRZYRODNICZY|INSTYTUT TECHNOLOGICZNO-PRZYRODNICZY - SAFONY\\\",\\\"route_desc\\\":\\\"SAFONY - Safony - Literacka - Koszalińska - Biskupińska - INSTYTUT TECHNOLOGICZNO-PRZYRODNICZY^S - kurs wykonywany tylko w dni nauki szkolnej |INSTYTUT TECHNOLOGICZNO-PRZYRODNICZY - Koszalińska - Literacka - Safony - SAFONY^S - kurs wykonywany tylko w dni nauki szkolnej \\\",\\\"route_type\\\":\\\"3\\\",\\\"route_color\\\":\\\"525252\\\",\\\"route_text_color\\\":\\\"FFFFFF\\\"}]\"}]",
+          "tokenUsage": {
+            "total": 198,
+            "prompt": 179,
+            "completion": 19,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0
+            }
+          },
+          "cached": false,
+          "latencyMs": 568,
+          "finishReason": "tool_calls",
+          "cost": 0.00010200000000000001,
+          "guardrails": {
+            "flagged": false
+          },
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "access-control-allow-origin": "*",
+                "access-control-expose-headers": "X-Generation-Id,cf-ray",
+                "cf-ray": "[REDACTED]",
+                "connection": "keep-alive",
+                "content-type": "application/json",
+                "date": "Wed, 17 Jun 2026 07:12:25 GMT",
+                "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+                "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+                "server": "cloudflare",
+                "transfer-encoding": "chunked",
+                "x-content-type-options": "nosniff",
+                "x-generation-id": "gen-1781680344-73GQ36Do82JAnzrVY96M"
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "question": "Check if a route with a number 24 exists."
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "MCP Tool Result (search_routes)"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "tokenUsage": {
+          "prompt": 179,
+          "completion": 19,
+          "cached": 0,
+          "total": 198,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "Check if a route with a number 24 exists."
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Generation-Id,cf-ray",
+              "cf-ray": "[REDACTED]",
+              "connection": "keep-alive",
+              "content-type": "application/json",
+              "date": "Wed, 17 Jun 2026 07:12:25 GMT",
+              "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+              "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+              "server": "cloudflare",
+              "transfer-encoding": "chunked",
+              "x-content-type-options": "nosniff",
+              "x-generation-id": "gen-1781680344-73GQ36Do82JAnzrVY96M"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 3,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 543,
+        "completion": 110,
+        "cached": 0,
+        "total": 653,
+        "numRequests": 3,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          }
+        }
+      },
+      "durationMs": 1866,
+      "evaluationDurationMs": 1866
+    }
+  },
+  "config": {
+    "prompts": [
+      "You are a helpful assistant. You must use the tools available to answer the question. {{question}}"
+    ],
+    "providers": [
+      {
+        "id": "openai:gpt-4.1-mini",
+        "config": {
+          "apiBaseUrl": "https://openrouter.ai/api/v1",
+          "apiKey": "[REDACTED]",
+          "mcp": {
+            "enabled": true,
+            "server": {
+              "url": "http://localhost:8000/mcp"
+            }
+          }
+        }
+      }
+    ],
+    "tests": [
+      {
+        "vars": {
+          "question": "List the names of every tool or function you currently have access to."
+        },
+        "assert": [
+          {
+            "type": "contains-all",
+            "value": [
+              "search_stops",
+              "search_routes"
+            ]
+          }
+        ]
+      },
+      {
+        "vars": {
+          "question": "Check if a stop called \"Rondo Kaponiera\" exists."
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "MCP Tool Result (search_stops)"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "question": "Check if a route with a number 24 exists."
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "MCP Tool Result (search_routes)"
+          }
+        ]
+      }
+    ],
+    "outputPath": [
+      "results.json"
+    ],
+    "extensions": []
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.121.15",
+    "nodeVersion": "v20.20.2",
+    "platform": "linux",
+    "arch": "x64",
+    "exportedAt": "2026-06-17T07:12:26.343Z",
+    "evaluationCreatedAt": "2026-06-17T07:12:24.361Z"
+  },
+  "vars": [
+    "question"
+  ],
+  "runtimeOptions": {
+    "eventSource": "cli",
+    "showProgressBar": true,
+    "repeat": 1,
+    "maxConcurrency": 4,
+    "cache": false
+  }
+}
