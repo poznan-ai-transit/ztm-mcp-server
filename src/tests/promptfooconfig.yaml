@@ -1,5 +1,11 @@
 # This is a test configuration file for PromptFoo, which defines the providers, prompts, and tests to be executed.
-# usage (in the tests directory):
+
+# if you want to test it with the openrouter provider you need to set the OPENROUTER_API_KEY environment variable first:
+# export OPENROUTER_API_KEY="your_openrouter_api_key_here"
+
+# if you want to test it with some other provider, you can add it to the providers section and set the appropriate environment variable for its API key.
+
+# Usage (in the tests directory):
 # npx promptfoo eval --no-cache -o results.json
 
 providers:
