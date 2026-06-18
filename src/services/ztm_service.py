@@ -69,12 +69,20 @@ class ZTMService:
             stops: list[dict[str, str]] = self._read_csv_from_zip(zf, "stops.txt")
             routes: list[dict[str, str]] = self._read_csv_from_zip(zf, "routes.txt")
             stop_times: list[dict[str, str]] = self._read_csv_from_zip(zf, "stop_times.txt")
+            trips: list[dict[str, str]] = self._read_csv_from_zip(zf, "trips.txt")
+            calendar: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar.txt")
+            feed_info: list[dict[str, str]] = self._read_csv_from_zip(zf, "feed_info.txt")
+            calendar_dates: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar_dates.txt")
+            
 
         return {
             "stops": stops,
             "routes": routes,
             "stop_times": stop_times,
-            "indexes": self._build_indexes(stops, routes, stop_times),
+            "trips": trips,
+            "calendar": calendar,
+            "feed_info": feed_info,
+            "calendar_dates": calendar_dates
         }
 
     def _read_csv_from_zip(self, zf: zipfile.ZipFile, filename: str) -> list[dict[str, str]]:
@@ -82,28 +90,6 @@ class ZTMService:
             text: str = f.read().decode("utf-8-sig")
         reader: csv.DictReader[str] = csv.DictReader(io.StringIO(text))
         return [row for row in reader]
-
-    def _build_indexes(
-        self,
-        stops: list[dict[str, str]],
-        routes: list[dict[str, str]],
-        stop_times: list[dict[str, str]],
-    ) -> dict[str, Any]:
-        stops_by_id: dict[str, dict[str, str]] = {row["stop_id"]: row for row in stops}
-        routes_by_id: dict[str, dict[str, str]] = {row["route_id"]: row for row in routes}
-        stop_times_by_trip_id: dict[str, list[dict[str, str]]] = {}
-        stop_times_by_stop_id: dict[str, list[dict[str, str]]] = {}
-
-        for row in stop_times:
-            stop_times_by_trip_id.setdefault(row["trip_id"], []).append(row)
-            stop_times_by_stop_id.setdefault(row["stop_id"], []).append(row)
-
-        return {
-            "stops_by_id": stops_by_id,
-            "routes_by_id": routes_by_id,
-            "stop_times_by_trip_id": stop_times_by_trip_id,
-            "stop_times_by_stop_id": stop_times_by_stop_id,
-        }
 
     def _seconds_until_next_six_am(self, now: datetime) -> float:
         next_run: datetime = now.replace(hour=6, minute=0, second=0, microsecond=0)
