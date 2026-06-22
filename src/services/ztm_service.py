@@ -42,12 +42,13 @@ class ZTMService:
 
         self._stop_event.clear()
         storage: ZTMStaticSchedule = ZTMStaticSchedule.instance()
+        storage.load(self.get_static_gtfs())
 
         def _runner() -> None:
             backoff = 60
             while not self._stop_event.is_set():
                 try:
-                    storage.set_static_gtfs(self.get_static_gtfs())
+                    storage.load(self.get_static_gtfs())
                     backoff = 60
                     self._stop_event.wait(timeout=self._seconds_until_next_six_am(datetime.now()))
                 except Exception:
