@@ -50,6 +50,34 @@ Base URL: `https://www.ztm.poznan.pl/pl/dla-deweloperow/`
 
 Data source: [ZTM Poznań developer portal](https://www.ztm.poznan.pl/otwarte-dane/dla-deweloperow/)
 
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest                 # full suite
+pytest -m "not slow"   # skip the tests that parse/freeze the full mock dataset
+```
+
+## Linting & formatting
+
+Code style is enforced with [Ruff](https://docs.astral.sh/ruff/) (configured in
+[pyproject.toml](pyproject.toml)):
+
+```bash
+ruff check src tests           # lint
+ruff format src tests          # auto-format
+ruff check --fix src tests     # lint + apply safe fixes
+```
+
+Both linting and the test suite run in CI on every push and pull request
+([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+Tests live in [tests/](tests/) and cover the in-memory schedule store
+([test_ztm_static_schedule.py](tests/test_ztm_static_schedule.py)), the ZTM data
+service ([test_ztm_service.py](tests/test_ztm_service.py)), and the MCP tool and
+resource callables ([test_mcp_server.py](tests/test_mcp_server.py)). They run
+entirely against the bundled mock data — no network access required.
+
 ## Documentation map
 
 | Document | Purpose |

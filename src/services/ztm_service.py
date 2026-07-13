@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from _thread import LockType
 import csv
 import io
-from pathlib import Path
 import threading
 import zipfile
+from _thread import LockType
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
+
 import requests
 
 from services.ztm_static_schedule import ZTMStaticSchedule
@@ -30,7 +31,7 @@ class ZTMService:
     _instance_lock: LockType = threading.Lock()
 
     @classmethod
-    def instance(cls) -> "ZTMService":
+    def instance(cls) -> ZTMService:
         return cls()
 
     def __new__(cls) -> ZTMService:
@@ -68,7 +69,9 @@ class ZTMService:
                     self._stop_event.wait(timeout=backoff)
                     backoff: int = min(backoff * 2, 1800)
 
-        self._thread = threading.Thread(target=_runner, name="ztm-static-schedule-refresh", daemon=True)
+        self._thread = threading.Thread(
+            target=_runner, name="ztm-static-schedule-refresh", daemon=True
+        )
         self._thread.start()
 
     def stop_daily_refresh(self) -> None:
@@ -104,7 +107,7 @@ class ZTMService:
         except KeyError as exc:
             raise MissingGTFSFileError(filename) from exc
         reader: csv.DictReader[str] = csv.DictReader(io.StringIO(text))
-        return [row for row in reader]
+        return list(reader)
 
     def _seconds_until_next_six_am(self, now: datetime) -> float:
         next_run: datetime = now.replace(hour=6, minute=0, second=0, microsecond=0)
@@ -112,7 +115,9 @@ class ZTMService:
             next_run = next_run + timedelta(days=1)
         return (next_run - now).total_seconds()
 
-    def _fetch_static_gtfs_zip(self, gtfs_endpoint: str = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile") -> zipfile.ZipFile:
+    def _fetch_static_gtfs_zip(
+        self, gtfs_endpoint: str = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
+    ) -> zipfile.ZipFile:
         resp: requests.Response = requests.get(gtfs_endpoint, timeout=30)
         resp.raise_for_status()
         return zipfile.ZipFile(io.BytesIO(resp.content))
