@@ -13,6 +13,18 @@ import requests
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 
+class MissingGTFSArchiveError(FileNotFoundError):
+    def __init__(self, archive_path: Path) -> None:
+        super().__init__(f"GTFS archive is missing: {archive_path}")
+        self.archive_path = archive_path
+
+
+class MissingGTFSFileError(FileNotFoundError):
+    def __init__(self, filename: str) -> None:
+        super().__init__(f"GTFS file is missing from archive: {filename}")
+        self.filename = filename
+
+
 class ZTMService:
     _instance = None
     _instance_lock: LockType = threading.Lock()
@@ -42,12 +54,12 @@ class ZTMService:
 
         self._stop_event.clear()
         storage: ZTMStaticSchedule = ZTMStaticSchedule.instance()
-        storage.load(self.get_static_gtfs())
 
         def _runner() -> None:
             backoff = 60
             while not self._stop_event.is_set():
                 try:
+                    
                     storage.load(self.get_static_gtfs())
                     backoff = 60
                     self._stop_event.wait(timeout=self._seconds_until_next_six_am(datetime.now()))
@@ -75,7 +87,6 @@ class ZTMService:
             feed_info: list[dict[str, str]] = self._read_csv_from_zip(zf, "feed_info.txt")
             calendar_dates: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar_dates.txt")
             
-
         return {
             "stops": stops,
             "routes": routes,
@@ -87,8 +98,11 @@ class ZTMService:
         }
 
     def _read_csv_from_zip(self, zf: zipfile.ZipFile, filename: str) -> list[dict[str, str]]:
-        with zf.open(filename) as f:
-            text: str = f.read().decode("utf-8-sig")
+        try:
+            with zf.open(filename) as f:
+                text: str = f.read().decode("utf-8-sig")
+        except KeyError as exc:
+            raise MissingGTFSFileError(filename) from exc
         reader: csv.DictReader[str] = csv.DictReader(io.StringIO(text))
         return [row for row in reader]
 
@@ -105,4 +119,7 @@ class ZTMService:
 
     def _mock_gtfs_zip(self) -> zipfile.ZipFile:
         zip_path: Path = Path(__file__).resolve().parents[1] / "mock_data" / "mock_data.zip"
-        return zipfile.ZipFile(zip_path)
+        try:
+            return zipfile.ZipFile(zip_path)
+        except FileNotFoundError as exc:
+            raise MissingGTFSArchiveError(zip_path) from exc
