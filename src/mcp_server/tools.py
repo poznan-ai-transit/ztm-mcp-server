@@ -1,5 +1,6 @@
 # tools.py
 from __future__ import annotations
+from dataclasses import asdict
 
 from fastmcp import FastMCP
 
@@ -26,7 +27,8 @@ def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
     - os. Sobieskiego
     """
     schedule: ZTMStaticSchedule = ZTMStaticSchedule.instance()
-    return schedule.search_stops(query, limit)
+    matched_stops = [{**asdict(match.stop), "score": match.score} for match in schedule.fuzzy_search_stops(query, limit=limit)]
+    return matched_stops
 
 
 @mcp_tools.tool()
