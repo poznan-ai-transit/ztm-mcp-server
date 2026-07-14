@@ -41,37 +41,169 @@ def real_gtfs() -> dict:
 
 @pytest.fixture
 def sample_gtfs() -> dict:
-    """A tiny, hand-checkable GTFS dataset in the shape ZTMService produces.
+    """A tiny, hand-checkable raw GTFS feed in the shape ZTMService produces.
 
-    Two stops, two routes, and stop_times for two trips. The numbers are chosen
-    so index grouping is easy to assert by hand:
-      - trip ``T1`` visits stops ``S1`` then ``S2``
-      - trip ``T2`` visits stop ``S1`` only
-      - stop ``S1`` therefore appears in two trips, ``S2`` in one.
+    It includes enough rows for ``ZTMStaticSchedule.load`` to build route/stop
+    indexes, stop-time lookups, and the service calendar.
     """
     stops = [
-        {"stop_id": "S1", "stop_name": "Rynek", "stop_lat": "52.40", "stop_lon": "16.93"},
-        {"stop_id": "S2", "stop_name": "Żabinko", "stop_lat": "52.41", "stop_lon": "16.94"},
+        {
+            "stop_id": "S1",
+            "stop_code": "001",
+            "stop_name": "Rynek",
+            "stop_lat": "52.40",
+            "stop_lon": "16.93",
+            "zone_id": "A",
+        },
+        {
+            "stop_id": "S2",
+            "stop_code": "002",
+            "stop_name": "Żabinko",
+            "stop_lat": "52.41",
+            "stop_lon": "16.94",
+            "zone_id": "A",
+        },
+        {
+            "stop_id": "S3",
+            "stop_code": "003",
+            "stop_name": "Dworzec",
+            "stop_lat": "52.42",
+            "stop_lon": "16.95",
+            "zone_id": "B",
+        },
     ]
     routes = [
-        {"route_id": "R1", "route_short_name": "1", "route_long_name": "Łęczyca"},
-        {"route_id": "R2", "route_short_name": "2", "route_long_name": "Śrem"},
+        {
+            "route_id": "R1",
+            "agency_id": "1",
+            "route_short_name": "1",
+            "route_long_name": "Łęczyca",
+            "route_type": "3",
+        },
+        {
+            "route_id": "R2",
+            "agency_id": "1",
+            "route_short_name": "2",
+            "route_long_name": "Śrem",
+            "route_type": "3",
+        },
+    ]
+    trips = [
+        {
+            "trip_id": "T1",
+            "route_id": "R1",
+            "service_id": "WKD",
+            "trip_headsign": "Rynek",
+            "direction_id": "0",
+            "brigade": "",
+        },
+        {
+            "trip_id": "T2",
+            "route_id": "R1",
+            "service_id": "WKD",
+            "trip_headsign": "Rynek",
+            "direction_id": "0",
+            "brigade": "",
+        },
+        {
+            "trip_id": "T3",
+            "route_id": "R2",
+            "service_id": "WKD",
+            "trip_headsign": "Dworzec",
+            "direction_id": "1",
+            "brigade": "",
+        },
     ]
     stop_times = [
-        {"trip_id": "T1", "stop_id": "S1", "stop_sequence": "0", "departure_time": "05:38:00"},
-        {"trip_id": "T1", "stop_id": "S2", "stop_sequence": "1", "departure_time": "05:43:00"},
-        {"trip_id": "T2", "stop_id": "S1", "stop_sequence": "0", "departure_time": "25:30:00"},
+        {
+            "trip_id": "T1",
+            "stop_id": "S1",
+            "arrival_time": "05:38:00",
+            "departure_time": "05:38:00",
+            "stop_sequence": "0",
+            "stop_headsign": "Rynek",
+            "pickup_type": "0",
+            "drop_off_type": "0",
+        },
+        {
+            "trip_id": "T1",
+            "stop_id": "S2",
+            "arrival_time": "05:43:00",
+            "departure_time": "05:43:00",
+            "stop_sequence": "1",
+            "stop_headsign": "Rynek",
+            "pickup_type": "0",
+            "drop_off_type": "0",
+        },
+        {
+            "trip_id": "T2",
+            "stop_id": "S1",
+            "arrival_time": "25:30:00",
+            "departure_time": "25:30:00",
+            "stop_sequence": "0",
+            "stop_headsign": "Rynek",
+            "pickup_type": "0",
+            "drop_off_type": "0",
+        },
+        {
+            "trip_id": "T2",
+            "stop_id": "S2",
+            "arrival_time": "25:35:00",
+            "departure_time": "25:35:00",
+            "stop_sequence": "1",
+            "stop_headsign": "Rynek",
+            "pickup_type": "0",
+            "drop_off_type": "0",
+        },
+        {
+            "trip_id": "T3",
+            "stop_id": "S2",
+            "arrival_time": "06:10:00",
+            "departure_time": "06:10:00",
+            "stop_sequence": "0",
+            "stop_headsign": "Dworzec",
+            "pickup_type": "0",
+            "drop_off_type": "0",
+        },
+        {
+            "trip_id": "T3",
+            "stop_id": "S3",
+            "arrival_time": "06:20:00",
+            "departure_time": "06:20:00",
+            "stop_sequence": "1",
+            "stop_headsign": "Dworzec",
+            "pickup_type": "0",
+            "drop_off_type": "0",
+        },
     ]
-    indexes = {
-        "stops_by_id": {row["stop_id"]: row for row in stops},
-        "routes_by_id": {row["route_id"]: row for row in routes},
-        "stop_times_by_trip_id": {
-            "T1": [r for r in stop_times if r["trip_id"] == "T1"],
-            "T2": [r for r in stop_times if r["trip_id"] == "T2"],
-        },
-        "stop_times_by_stop_id": {
-            "S1": [r for r in stop_times if r["stop_id"] == "S1"],
-            "S2": [r for r in stop_times if r["stop_id"] == "S2"],
-        },
+    calendar = [
+        {
+            "service_id": "WKD",
+            "monday": "1",
+            "tuesday": "1",
+            "wednesday": "1",
+            "thursday": "1",
+            "friday": "1",
+            "saturday": "0",
+            "sunday": "0",
+            "start_date": "20260601",
+            "end_date": "20260630",
+        }
+    ]
+    return {
+        "stops": stops,
+        "routes": routes,
+        "trips": trips,
+        "stop_times": stop_times,
+        "calendar": calendar,
+        "feed_info": [
+            {
+                "feed_publisher_name": "ZTM Poznań",
+                "feed_publisher_url": "https://www.ztm.poznan.pl/",
+                "feed_lang": "pl",
+                "feed_start_date": "20260601",
+                "feed_end_date": "20260630",
+            }
+        ],
+        "calendar_dates": [],
     }
-    return {"stops": stops, "routes": routes, "stop_times": stop_times, "indexes": indexes}

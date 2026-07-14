@@ -1,4 +1,4 @@
-"""Tests for ZTMService: mock-GTFS loading, index building, and scheduling math."""
+"""Tests for ZTMService: mock-GTFS loading, parsing, and scheduling math."""
 
 from __future__ import annotations
 
@@ -34,11 +34,11 @@ def service() -> ZTMService:
 
 
 def test_get_static_gtfs_has_expected_top_level_keys(real_gtfs):
-    assert set(real_gtfs) == {"stops", "routes", "stop_times", "indexes"}
+    assert set(real_gtfs) == {"stops", "routes", "stop_times", "trips", "calendar", "feed_info", "calendar_dates"}
 
 
 def test_get_static_gtfs_collections_are_non_empty(real_gtfs):
-    assert real_gtfs["stops"] and real_gtfs["routes"] and real_gtfs["stop_times"]
+    assert real_gtfs["stops"] and real_gtfs["routes"] and real_gtfs["stop_times"] and real_gtfs["trips"]
 
 
 def test_get_static_gtfs_rows_are_dicts_with_expected_fields(real_gtfs):
@@ -57,53 +57,6 @@ def test_get_static_gtfs_preserves_polish_diacritics(real_gtfs):
 def test_get_static_gtfs_is_deterministic(service):
     """FR-5 / NFR-2: identical inputs yield identical outputs across runs."""
     assert service.get_static_gtfs() == service.get_static_gtfs()
-
-
-# --------------------------------------------------------------------------- #
-# _build_indexes — grouping correctness on hand-checkable input
-# --------------------------------------------------------------------------- #
-
-
-def test_build_indexes_keys_by_id(service, sample_gtfs):
-    idx = service._build_indexes(
-        sample_gtfs["stops"], sample_gtfs["routes"], sample_gtfs["stop_times"]
-    )
-    assert set(idx["stops_by_id"]) == {"S1", "S2"}
-    assert set(idx["routes_by_id"]) == {"R1", "R2"}
-    assert idx["stops_by_id"]["S1"]["stop_name"] == "Rynek"
-
-
-def test_build_indexes_groups_stop_times_by_trip(service, sample_gtfs):
-    idx = service._build_indexes(
-        sample_gtfs["stops"], sample_gtfs["routes"], sample_gtfs["stop_times"]
-    )
-    assert len(idx["stop_times_by_trip_id"]["T1"]) == 2
-    assert len(idx["stop_times_by_trip_id"]["T2"]) == 1
-
-
-def test_build_indexes_groups_stop_times_by_stop(service, sample_gtfs):
-    idx = service._build_indexes(
-        sample_gtfs["stops"], sample_gtfs["routes"], sample_gtfs["stop_times"]
-    )
-    # S1 served by T1 and T2; S2 served only by T1.
-    assert len(idx["stop_times_by_stop_id"]["S1"]) == 2
-    assert len(idx["stop_times_by_stop_id"]["S2"]) == 1
-
-
-def test_build_indexes_preserves_row_order_within_group(service, sample_gtfs):
-    idx = service._build_indexes(
-        sample_gtfs["stops"], sample_gtfs["routes"], sample_gtfs["stop_times"]
-    )
-    seqs = [r["stop_sequence"] for r in idx["stop_times_by_trip_id"]["T1"]]
-    assert seqs == ["0", "1"]
-
-
-def test_build_indexes_on_real_mock_data_covers_every_row(real_gtfs):
-    data = real_gtfs
-    idx = data["indexes"]
-    # Every stop_time row is reachable through both trip and stop indexes.
-    assert sum(len(v) for v in idx["stop_times_by_trip_id"].values()) == len(data["stop_times"])
-    assert sum(len(v) for v in idx["stop_times_by_stop_id"].values()) == len(data["stop_times"])
 
 
 # --------------------------------------------------------------------------- #
