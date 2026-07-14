@@ -13,6 +13,7 @@ from services.ztm_static_schedule import ZTMStaticSchedule
 
 @lifespan
 async def ztm_service_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+    print("Starting ZTMService lifespan...")
     ztm_service: ZTMService = ZTMService.instance()
     ztm_service.start_daily_refresh()
 

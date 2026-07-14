@@ -14,6 +14,18 @@ import requests
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 
+class MissingGTFSArchiveError(FileNotFoundError):
+    def __init__(self, archive_path: Path) -> None:
+        super().__init__(f"GTFS archive is missing: {archive_path}")
+        self.archive_path = archive_path
+
+
+class MissingGTFSFileError(FileNotFoundError):
+    def __init__(self, filename: str) -> None:
+        super().__init__(f"GTFS file is missing from archive: {filename}")
+        self.filename = filename
+
+
 class ZTMService:
     _instance = None
     _instance_lock: LockType = threading.Lock()
@@ -48,7 +60,8 @@ class ZTMService:
             backoff = 60
             while not self._stop_event.is_set():
                 try:
-                    storage.set_static_gtfs(self.get_static_gtfs())
+                    
+                    storage.load(self.get_static_gtfs())
                     backoff = 60
                     self._stop_event.wait(timeout=self._seconds_until_next_six_am(datetime.now()))
                 except Exception:
@@ -72,41 +85,29 @@ class ZTMService:
             stops: list[dict[str, str]] = self._read_csv_from_zip(zf, "stops.txt")
             routes: list[dict[str, str]] = self._read_csv_from_zip(zf, "routes.txt")
             stop_times: list[dict[str, str]] = self._read_csv_from_zip(zf, "stop_times.txt")
-
+            trips: list[dict[str, str]] = self._read_csv_from_zip(zf, "trips.txt")
+            calendar: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar.txt")
+            feed_info: list[dict[str, str]] = self._read_csv_from_zip(zf, "feed_info.txt")
+            calendar_dates: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar_dates.txt")
+            
         return {
             "stops": stops,
             "routes": routes,
             "stop_times": stop_times,
-            "indexes": self._build_indexes(stops, routes, stop_times),
+            "trips": trips,
+            "calendar": calendar,
+            "feed_info": feed_info,
+            "calendar_dates": calendar_dates
         }
 
     def _read_csv_from_zip(self, zf: zipfile.ZipFile, filename: str) -> list[dict[str, str]]:
-        with zf.open(filename) as f:
-            text: str = f.read().decode("utf-8-sig")
+        try:
+            with zf.open(filename) as f:
+                text: str = f.read().decode("utf-8-sig")
+        except KeyError as exc:
+            raise MissingGTFSFileError(filename) from exc
         reader: csv.DictReader[str] = csv.DictReader(io.StringIO(text))
         return list(reader)
-
-    def _build_indexes(
-        self,
-        stops: list[dict[str, str]],
-        routes: list[dict[str, str]],
-        stop_times: list[dict[str, str]],
-    ) -> dict[str, Any]:
-        stops_by_id: dict[str, dict[str, str]] = {row["stop_id"]: row for row in stops}
-        routes_by_id: dict[str, dict[str, str]] = {row["route_id"]: row for row in routes}
-        stop_times_by_trip_id: dict[str, list[dict[str, str]]] = {}
-        stop_times_by_stop_id: dict[str, list[dict[str, str]]] = {}
-
-        for row in stop_times:
-            stop_times_by_trip_id.setdefault(row["trip_id"], []).append(row)
-            stop_times_by_stop_id.setdefault(row["stop_id"], []).append(row)
-
-        return {
-            "stops_by_id": stops_by_id,
-            "routes_by_id": routes_by_id,
-            "stop_times_by_trip_id": stop_times_by_trip_id,
-            "stop_times_by_stop_id": stop_times_by_stop_id,
-        }
 
     def _seconds_until_next_six_am(self, now: datetime) -> float:
         next_run: datetime = now.replace(hour=6, minute=0, second=0, microsecond=0)
@@ -123,4 +124,7 @@ class ZTMService:
 
     def _mock_gtfs_zip(self) -> zipfile.ZipFile:
         zip_path: Path = Path(__file__).resolve().parents[1] / "mock_data" / "mock_data.zip"
-        return zipfile.ZipFile(zip_path)
+        try:
+            return zipfile.ZipFile(zip_path)
+        except FileNotFoundError as exc:
+            raise MissingGTFSArchiveError(zip_path) from exc
