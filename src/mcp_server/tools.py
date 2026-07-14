@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 
 from services.ztm_static_schedule import ZTMStaticSchedule
 
+
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 
 
