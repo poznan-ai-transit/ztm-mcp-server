@@ -16,6 +16,23 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Running the MCP server
+
+```bash
+python src/main.py
+```
+
+Test with MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+- Transport Type: **Streamable HTTP**
+- URL: `http://localhost:8000/mcp`
+
+Stateless HTTP is enabled to avoid missing session ID errors.
+
 ## Examples
 
 | Script | What it does |
