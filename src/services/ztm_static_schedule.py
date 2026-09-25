@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import unicodedata
 from bisect import bisect_left
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from collections import Counter
@@ -555,6 +555,43 @@ class ZTMStaticSchedule:
             for stop_id, score in ranked
             if stop_id in self.data.stops_by_id
         ]
+
+    def search_routes(self, query: str, limit: int = 10) -> list[dict]:
+        """Public route-search helper used by the MCP tool layer."""
+        norm_query = normalize_name(query)
+        if not norm_query:
+            return []
+
+        ranked: list[tuple[float, str]] = []
+        for route in self.get_all_routes():
+            candidates = (
+                normalize_name(route.route_id),
+                normalize_name(route.route_short_name),
+                normalize_name(route.route_long_name),
+            )
+
+            best_score = 0.0
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                if norm_query == candidate:
+                    best_score = max(best_score, 1.0)
+                elif norm_query in candidate or candidate in norm_query:
+                    best_score = max(best_score, 0.9)
+                else:
+                    best_score = max(best_score, SequenceMatcher(None, norm_query, candidate).ratio())
+
+            if best_score > 0.45:
+                ranked.append((best_score, route.route_id))
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        results: list[dict] = []
+        for score, route_id in ranked[:limit]:
+            summary = self.get_route_summary(route_id)
+            if summary is None:
+                continue
+            results.append({**summary, "score": score})
+        return results
 
     # -- composite / "useful" getters ----------------------------------------
     # These chain the id-getters above into the shapes an MCP tool actually
