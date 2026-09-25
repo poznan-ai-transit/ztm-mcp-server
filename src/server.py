@@ -1,5 +1,3 @@
-"""Shared FastMCP server setup and HTTP runner."""
-
 from __future__ import annotations
 
 from fastmcp import FastMCP

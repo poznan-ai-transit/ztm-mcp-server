@@ -1,6 +1,5 @@
-"""Tests for server creation, lifecycle, and HTTP startup configuration."""
-
 import asyncio
+from typing import Any
 from unittest.mock import Mock
 
 from fastmcp import Client, FastMCP
@@ -13,7 +12,7 @@ def test_create_server_returns_fresh_instance_without_starting_service(monkeypat
     start = Mock()
     monkeypatch.setattr(ZTMService, "start_daily_refresh", start)
 
-    server = create_server()
+    server: FastMCP[Any] = create_server()
 
     assert isinstance(server, FastMCP)
     assert create_server() is not server
@@ -38,7 +37,7 @@ def test_server_starts_and_stops_service(monkeypatch):
 
 
 def test_run_server_passes_http_settings(monkeypatch):
-    server = create_server()
+    server: FastMCP[Any] = create_server()
     run = Mock()
     monkeypatch.setattr(server, "run", run)
 

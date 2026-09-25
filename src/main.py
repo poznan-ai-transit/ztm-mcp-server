@@ -1,5 +1,3 @@
-"""Application entry point."""
-
 from server import create_server, run_server
 
 
