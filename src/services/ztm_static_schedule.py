@@ -53,6 +53,7 @@ from difflib import SequenceMatcher
 from collections import Counter
 import threading
 
+from logging_config import logger
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -276,7 +277,7 @@ class ZTMStaticSchedule:
         
         with cls._lock:
             storage.data = data
-        print("ZTMStaticSchedule: Loaded GTFS data")
+        logger.debug("GTFS data loaded into schedule storage")
         return storage
     
     def _load_feed_info(self, rows: list[dict[str, str]]) -> FeedInfo | None:
