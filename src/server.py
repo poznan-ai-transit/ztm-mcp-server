@@ -1,4 +1,3 @@
-# server.py
 from __future__ import annotations
 
 from fastmcp import FastMCP
@@ -9,18 +8,23 @@ from mcp_server.lifespans import ztm_service_lifespan
 from mcp_server.resources import mcp_resources
 from mcp_server.tools import mcp_tools
 
-mcp: FastMCP = FastMCP(
-    "ztm-poznan",
-    strict_input_validation=True,
-    mask_error_details=True,
-    lifespan=ztm_service_lifespan,
-)
 
-mcp.mount(mcp_tools)
-mcp.mount(mcp_resources)
+def create_server() -> FastMCP:
+    """Create a configured server without starting its lifespan or transport."""
+    mcp = FastMCP(
+        "ztm-poznan",
+        strict_input_validation=True,
+        mask_error_details=True,
+        lifespan=ztm_service_lifespan,
+    )
+
+    mcp.mount(mcp_tools)
+    mcp.mount(mcp_resources)
+    return mcp
 
 
-if __name__ == "__main__":
+def run_server(mcp: FastMCP) -> None:
+    """Run a configured server using the application's HTTP settings."""
     mcp.run(
         transport="http",
         host="0.0.0.0",
@@ -32,10 +36,3 @@ if __name__ == "__main__":
             )
         ],
     )
-
-# HOW TO TEST:
-# run npx @modelcontextprotocol/inspector
-# In MCP Inspector set:
-# Transport Type: Streamable HTTP
-# URL: http://localhost:8000/mcp
-# Stateless HTTP is enabled to avoid missing session ID errors.
