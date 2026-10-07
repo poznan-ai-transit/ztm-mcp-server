@@ -11,6 +11,7 @@ from typing import Any
 
 import requests
 
+from logging_config import logger
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 
@@ -60,12 +61,14 @@ class ZTMService:
             backoff = 60
             while not self._stop_event.is_set():
                 try:
-                    
+                    logger.info("Refreshing static GTFS schedule")
                     storage.load(self.get_static_gtfs())
                     backoff = 60
-                    self._stop_event.wait(timeout=self._seconds_until_next_six_am(datetime.now()))
+                    delay = self._seconds_until_next_six_am(datetime.now())
+                    logger.info("GTFS refresh completed; next refresh in %.0f seconds", delay)
+                    self._stop_event.wait(timeout=delay)
                 except Exception:
-                    # log exception
+                    logger.exception("GTFS refresh failed; retrying in %s seconds", backoff)
                     self._stop_event.wait(timeout=backoff)
                     backoff: int = min(backoff * 2, 1800)
 
@@ -73,14 +76,18 @@ class ZTMService:
             target=_runner, name="ztm-static-schedule-refresh", daemon=True
         )
         self._thread.start()
+        logger.info("Daily GTFS refresh worker started")
 
     def stop_daily_refresh(self) -> None:
         self._stop_event.set()
         if self._thread is not None:
+            logger.debug("Waiting for GTFS refresh worker to stop")
             self._thread.join()
             self._thread = None
+            logger.info("Daily GTFS refresh worker stopped")
 
     def get_static_gtfs(self) -> dict[str, Any]:
+        logger.debug("Reading bundled GTFS archive")
         with self._mock_gtfs_zip() as zf:
             stops: list[dict[str, str]] = self._read_csv_from_zip(zf, "stops.txt")
             routes: list[dict[str, str]] = self._read_csv_from_zip(zf, "routes.txt")
@@ -107,7 +114,9 @@ class ZTMService:
         except KeyError as exc:
             raise MissingGTFSFileError(filename) from exc
         reader: csv.DictReader[str] = csv.DictReader(io.StringIO(text))
-        return list(reader)
+        rows = list(reader)
+        logger.debug("Read %s rows from %s", len(rows), filename)
+        return rows
 
     def _seconds_until_next_six_am(self, now: datetime) -> float:
         next_run: datetime = now.replace(hour=6, minute=0, second=0, microsecond=0)
