@@ -1,8 +1,9 @@
 # tools.py
 from __future__ import annotations
+
+import re
 from dataclasses import asdict
 from datetime import date as calendar_date
-import re
 from typing import Any
 
 from fastmcp import FastMCP
@@ -10,7 +11,6 @@ from fastmcp.exceptions import ToolError
 
 from logging_config import logger
 from services.ztm_static_schedule import ZTMStaticSchedule
-
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 
@@ -35,7 +35,10 @@ def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
     """
     logger.debug("search_stops: query=%r limit=%d", query, limit)
     schedule: ZTMStaticSchedule = ZTMStaticSchedule.instance()
-    matched_stops = [{**asdict(match.stop), "score": match.score} for match in schedule.fuzzy_search_stops(query, limit=limit)]
+    matched_stops = [
+        {**asdict(match.stop), "score": match.score}
+        for match in schedule.fuzzy_search_stops(query, limit=limit)
+    ]
     logger.debug("search_stops returned %d stops", len(matched_stops))
     return matched_stops
 
@@ -92,7 +95,12 @@ def get_departures(
     """
     logger.debug(
         "get_departures: stop_id=%r route_id=%r date=%r time=%r direction_id=%r limit=%d",
-        stop_id, route_id, date, time, direction_id, limit,
+        stop_id,
+        route_id,
+        date,
+        time,
+        direction_id,
+        limit,
     )
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         raise ToolError("Invalid date. Use YYYY-MM-DD.")
@@ -116,8 +124,12 @@ def get_departures(
         raise ToolError("Unknown route_id. Use search_routes to find a valid line.")
     hour, minute = map(int, time.split(":"))
     departures = schedule.get_next_departures(
-        stop_id, hour * 3600 + minute * 60, day,
-        limit=limit, route_id=route_id, direction_id=direction_id,
+        stop_id,
+        hour * 3600 + minute * 60,
+        day,
+        limit=limit,
+        route_id=route_id,
+        direction_id=direction_id,
     )
     logger.debug("get_departures returned %d departures", len(departures))
     return {

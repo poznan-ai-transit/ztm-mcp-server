@@ -6,8 +6,8 @@ effect but return the original callable, so they can be invoked directly.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 from fastmcp import Client
@@ -15,7 +15,12 @@ from fastmcp.exceptions import ToolError
 
 from mcp_server.resources import list_routes_and_stops
 from mcp_server.tools import (
-    echo, search_routes, search_stops, get_departures, get_routes_for_stop, mcp_tools,
+    echo,
+    get_departures,
+    get_routes_for_stop,
+    mcp_tools,
+    search_routes,
+    search_stops,
 )
 from services.ztm_static_schedule import ZTMStaticSchedule
 
@@ -72,13 +77,16 @@ def test_departures_filter_direction_before_limit(sample_gtfs):
     assert result["departures"][0]["departure_datetime"] == "2026-06-16T01:30:00"
 
 
-@pytest.mark.parametrize("stop,route,day,time,direction", [
-    ("S3", "R1", "2026-06-15", "05:00", None),
-    ("S2", "R2", "2026-06-15", "06:11", None),
-    ("S2", "R2", "2026-06-14", "05:00", None),
-    ("S2", "R2", "2026-07-01", "05:00", None),
-    ("S2", "R2", "2026-06-15", "05:00", 0),
-])
+@pytest.mark.parametrize(
+    "stop,route,day,time,direction",
+    [
+        ("S3", "R1", "2026-06-15", "05:00", None),
+        ("S2", "R2", "2026-06-15", "06:11", None),
+        ("S2", "R2", "2026-06-14", "05:00", None),
+        ("S2", "R2", "2026-07-01", "05:00", None),
+        ("S2", "R2", "2026-06-15", "05:00", 0),
+    ],
+)
 def test_departures_no_matching_service(sample_gtfs, stop, route, day, time, direction):
     ZTMStaticSchedule.load(sample_gtfs)
     assert get_departures(stop, route, day, time, direction)["departures"] == []
@@ -96,15 +104,30 @@ def test_departures_calendar_exceptions_and_inclusive_time(sample_gtfs):
     assert get_departures("S2", "R2", "2026-06-15", "06:10")["departures"] == []
 
 
-@pytest.mark.parametrize("override", [
-    {"date": "2026-02-30"}, {"date": "20260615"},
-    {"time": "24:00"}, {"time": "06:60"}, {"time": "6:10"},
-    {"limit": 0}, {"limit": -1}, {"limit": 101}, {"direction_id": 2},
-    {"stop_id": "missing"}, {"route_id": "missing"},
-])
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"date": "2026-02-30"},
+        {"date": "20260615"},
+        {"time": "24:00"},
+        {"time": "06:60"},
+        {"time": "6:10"},
+        {"limit": 0},
+        {"limit": -1},
+        {"limit": 101},
+        {"direction_id": 2},
+        {"stop_id": "missing"},
+        {"route_id": "missing"},
+    ],
+)
 def test_departures_invalid_input(sample_gtfs, override):
     ZTMStaticSchedule.load(sample_gtfs)
-    arguments = dict(stop_id="S2", route_id="R2", date="2026-06-15", time="06:10")
+    arguments = {
+        "stop_id": "S2",
+        "route_id": "R2",
+        "date": "2026-06-15",
+        "time": "06:10",
+    }
     with pytest.raises(ToolError):
         get_departures(**(arguments | override))
 
@@ -126,9 +149,15 @@ def test_new_tools_through_mcp(sample_gtfs):
         async with Client(mcp_tools) as client:
             names = {tool.name for tool in await client.list_tools()}
             assert {"get_departures", "get_routes_for_stop"} <= names
-            departures = await client.call_tool("get_departures", {
-                "stop_id": "S2", "route_id": "R2", "date": "2026-06-15", "time": "06:10",
-            })
+            departures = await client.call_tool(
+                "get_departures",
+                {
+                    "stop_id": "S2",
+                    "route_id": "R2",
+                    "date": "2026-06-15",
+                    "time": "06:10",
+                },
+            )
             assert departures.data["departures"][0]["departure_time"] == "06:10:00"
             routes = await client.call_tool("get_routes_for_stop", {"stop_id": "S2"})
             assert [r["route_id"] for r in routes.data] == ["R1", "R2"]
