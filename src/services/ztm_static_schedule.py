@@ -605,6 +605,8 @@ class ZTMStaticSchedule:
         after_secs: int,
         day: date,
         limit: int = 10,
+        route_id: str | None = None,
+        direction_id: int | None = None,
     ) -> list[dict]:
         """
         Return up to `limit` upcoming departures from `stop_id` at/after
@@ -613,18 +615,25 @@ class ZTMStaticSchedule:
         the raw GTFS-style `departure_time` string, so callers needing a
         normal timestamp don't have to do the conversion themselves.
         """
-        active = self.get_active_services(day)
-        entries = self.data.departures_by_stop.get(stop_id, [])
+        if limit < 1:
+            return []
+        data = self.data
+        active = {sid for sid, service in data.services.items() if service.runs_on(day)}
+        entries = data.departures_by_stop.get(stop_id, [])
 
         # binary search for the first entry >= after_secs
         idx = bisect_left(entries, (after_secs, "", -1))
 
         results = []
         for departure_secs, trip_id, stop_sequence in entries[idx:]:
-            trip = self.data.trips_by_id[trip_id]
+            trip = data.trips_by_id[trip_id]
             if trip.service_id not in active:
                 continue
-            route = self.data.routes_by_id.get(trip.route_id)
+            if route_id is not None and trip.route_id != route_id:
+                continue
+            if direction_id is not None and trip.direction_id != direction_id:
+                continue
+            route = data.routes_by_id.get(trip.route_id)
             results.append({
                 "departure_time": secs_to_hms(departure_secs),
                 "departure_datetime": secs_to_datetime(departure_secs, day).isoformat(),
@@ -632,6 +641,7 @@ class ZTMStaticSchedule:
                 "route_id": trip.route_id,
                 "route_short_name": route.route_short_name if route else trip.route_id,
                 "trip_headsign": trip.trip_headsign,
+                "direction_id": trip.direction_id,
                 "stop_sequence": stop_sequence,
             })
             if len(results) >= limit:
