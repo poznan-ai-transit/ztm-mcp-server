@@ -8,6 +8,7 @@ from typing import Any
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
+from logging_config import logger
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 
@@ -17,6 +18,8 @@ mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 @mcp_tools.tool()
 def echo(text: str) -> str:
     """Test tool — returns input."""
+    logger.debug("echo: input_length=%d", len(text))
+    logger.debug("echo returned %d characters", len(text))
     return text
 
 
@@ -30,8 +33,10 @@ def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
     - Rondo Kaponiera
     - os. Sobieskiego
     """
+    logger.debug("search_stops: query=%r limit=%d", query, limit)
     schedule: ZTMStaticSchedule = ZTMStaticSchedule.instance()
     matched_stops = [{**asdict(match.stop), "score": match.score} for match in schedule.fuzzy_search_stops(query, limit=limit)]
+    logger.debug("search_stops returned %d stops", len(matched_stops))
     return matched_stops
 
 
@@ -46,7 +51,10 @@ def search_routes(query: str, limit: int = 10) -> list[dict[str, str]]:
     - SYPNIEWO - GARBARY PKM
     """
     schedule: ZTMStaticSchedule = ZTMStaticSchedule.instance()
-    return schedule.search_routes(query, limit)
+    logger.debug("search_routes: query=%r limit=%d", query, limit)
+    routes = schedule.search_routes(query, limit)
+    logger.debug("search_routes returned %d routes", len(routes))
+    return routes
 
 
 @mcp_tools.tool()
@@ -55,10 +63,12 @@ def get_routes_for_stop(stop_id: str) -> list[dict[str, Any]]:
 
     This lists routes in the dataset, regardless of their operating date.
     """
+    logger.debug("get_routes_for_stop: stop_id=%r", stop_id)
     schedule = ZTMStaticSchedule.instance()
     if schedule.get_stop(stop_id) is None:
         raise ToolError("Unknown stop_id. Use search_stops to find a valid stop.")
     routes = schedule.get_routes_for_stop(stop_id)
+    logger.debug("get_routes_for_stop returned %d routes", len(routes))
     return [asdict(route) for route in sorted(routes, key=lambda route: route.route_id)]
 
 
@@ -80,6 +90,10 @@ def get_departures(
     other service days or provide live delays. Direction is optional (0 or 1).
     An empty departures list means no matching departures in that service day.
     """
+    logger.debug(
+        "get_departures: stop_id=%r route_id=%r date=%r time=%r direction_id=%r limit=%d",
+        stop_id, route_id, date, time, direction_id, limit,
+    )
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         raise ToolError("Invalid date. Use YYYY-MM-DD.")
     try:
@@ -105,6 +119,7 @@ def get_departures(
         stop_id, hour * 3600 + minute * 60, day,
         limit=limit, route_id=route_id, direction_id=direction_id,
     )
+    logger.debug("get_departures returned %d departures", len(departures))
     return {
         "stop_id": stop.stop_id,
         "stop_name": stop.stop_name,
