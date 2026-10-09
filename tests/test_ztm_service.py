@@ -34,11 +34,24 @@ def service() -> ZTMService:
 
 
 def test_get_static_gtfs_has_expected_top_level_keys(real_gtfs):
-    assert set(real_gtfs) == {"stops", "routes", "stop_times", "trips", "calendar", "feed_info", "calendar_dates"}
+    assert set(real_gtfs) == {
+        "stops",
+        "routes",
+        "stop_times",
+        "trips",
+        "calendar",
+        "feed_info",
+        "calendar_dates",
+    }
 
 
 def test_get_static_gtfs_collections_are_non_empty(real_gtfs):
-    assert real_gtfs["stops"] and real_gtfs["routes"] and real_gtfs["stop_times"] and real_gtfs["trips"]
+    assert (
+        real_gtfs["stops"]
+        and real_gtfs["routes"]
+        and real_gtfs["stop_times"]
+        and real_gtfs["trips"]
+    )
 
 
 def test_get_static_gtfs_rows_are_dicts_with_expected_fields(real_gtfs):

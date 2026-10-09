@@ -45,13 +45,13 @@ timestamp" -- it has to happen with a date in hand, not at parse time.
 
 from __future__ import annotations
 
+import threading
 import unicodedata
 from bisect import bisect_left
-from dataclasses import asdict, dataclass, field
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
-from collections import Counter
-import threading
 
 from logging_config import logger
 
@@ -59,10 +59,11 @@ from logging_config import logger
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def hms_to_secs(value: str) -> int:
     """Convert 'HH:MM:SS' (possibly >24h, e.g. '25:30:00') to seconds since
     the start of the GTFS service day."""
-    
+
     # Check if string has 3 parts separated by colons
     parts = value.strip().split(":")
     if len(parts) != 3:
@@ -120,6 +121,7 @@ def _parse_date(value: str) -> date:
 # ---------------------------------------------------------------------------
 # Core records
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class Stop:
@@ -205,6 +207,7 @@ class FeedInfo:
 class StopMatch:
     """A fuzzy/substring search hit, with a score so callers (and the LLM)
     can tell a confident match from a guess."""
+
     stop: Stop
     score: float  # 1.0 = exact normalized match, lower = weaker match
 
@@ -229,15 +232,16 @@ class PrecomputedData:
 # Container with indexes
 # ---------------------------------------------------------------------------
 
+
 class ZTMStaticSchedule:
-    _instance: "ZTMStaticSchedule | None" = None
+    _instance: ZTMStaticSchedule | None = None
     _lock = threading.Lock()
 
     @classmethod
-    def instance(cls) -> "ZTMStaticSchedule":
+    def instance(cls) -> ZTMStaticSchedule:
         return cls()
 
-    def __new__(cls) -> "ZTMStaticSchedule":
+    def __new__(cls) -> ZTMStaticSchedule:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
@@ -260,7 +264,7 @@ class ZTMStaticSchedule:
     # -- loading -----------------------------------------------------------
 
     @classmethod
-    def load(cls, rows_by_file: dict[str, list[dict[str, str]]]) -> "ZTMStaticSchedule":
+    def load(cls, rows_by_file: dict[str, list[dict[str, str]]]) -> ZTMStaticSchedule:
         storage = cls.instance()
         data = PrecomputedData()
 
@@ -274,12 +278,12 @@ class ZTMStaticSchedule:
 
         storage._build_departure_index(data)
         storage._build_route_stop_indexes(data)
-        
+
         with cls._lock:
             storage.data = data
         logger.debug("GTFS data loaded into schedule storage")
         return storage
-    
+
     def _load_feed_info(self, rows: list[dict[str, str]]) -> FeedInfo | None:
         if not rows:
             return None
@@ -339,8 +343,13 @@ class ZTMStaticSchedule:
             pattern = tuple(
                 row[day] == "1"
                 for day in (
-                    "monday", "tuesday", "wednesday", "thursday",
-                    "friday", "saturday", "sunday",
+                    "monday",
+                    "tuesday",
+                    "wednesday",
+                    "thursday",
+                    "friday",
+                    "saturday",
+                    "sunday",
                 )
             )
             data.services[service_id] = Service(
@@ -437,9 +446,7 @@ class ZTMStaticSchedule:
         for (route_id, direction_id), counter in pattern_counts.items():
             most_common_pattern, _ = counter.most_common(1)[0]
 
-            data.stops_by_route.setdefault(route_id, {})[direction_id] = list(
-                most_common_pattern
-            )
+            data.stops_by_route.setdefault(route_id, {})[direction_id] = list(most_common_pattern)
 
     # -- id-based getters ----------------------------------------------------
     # These are the primary entry points for an MCP tool: GTFS is a relational
@@ -453,7 +460,7 @@ class ZTMStaticSchedule:
     def get_stop(self, stop_id: str) -> Stop | None:
         """Resolve a single stop_id to its Stop record."""
         return self.data.stops_by_id.get(stop_id)
-    
+
     def get_all_stops(self) -> list[Stop]:
         """Return all stops."""
         return list(self.data.stops_by_id.values())
@@ -461,7 +468,7 @@ class ZTMStaticSchedule:
     def get_route(self, route_id: str) -> Route | None:
         """Resolve a single route_id to its Route record."""
         return self.data.routes_by_id.get(route_id)
-    
+
     def get_all_routes(self) -> list[Route]:
         """Return all routes."""
         return list(self.data.routes_by_id.values())
@@ -580,7 +587,9 @@ class ZTMStaticSchedule:
                 elif norm_query in candidate or candidate in norm_query:
                     best_score = max(best_score, 0.9)
                 else:
-                    best_score = max(best_score, SequenceMatcher(None, norm_query, candidate).ratio())
+                    best_score = max(
+                        best_score, SequenceMatcher(None, norm_query, candidate).ratio()
+                    )
 
             if best_score > 0.45:
                 ranked.append((best_score, route.route_id))
@@ -605,6 +614,8 @@ class ZTMStaticSchedule:
         after_secs: int,
         day: date,
         limit: int = 10,
+        route_id: str | None = None,
+        direction_id: int | None = None,
     ) -> list[dict]:
         """
         Return up to `limit` upcoming departures from `stop_id` at/after
@@ -613,27 +624,37 @@ class ZTMStaticSchedule:
         the raw GTFS-style `departure_time` string, so callers needing a
         normal timestamp don't have to do the conversion themselves.
         """
-        active = self.get_active_services(day)
-        entries = self.data.departures_by_stop.get(stop_id, [])
+        if limit < 1:
+            return []
+        data = self.data
+        active = {sid for sid, service in data.services.items() if service.runs_on(day)}
+        entries = data.departures_by_stop.get(stop_id, [])
 
         # binary search for the first entry >= after_secs
         idx = bisect_left(entries, (after_secs, "", -1))
 
         results = []
         for departure_secs, trip_id, stop_sequence in entries[idx:]:
-            trip = self.data.trips_by_id[trip_id]
+            trip = data.trips_by_id[trip_id]
             if trip.service_id not in active:
                 continue
-            route = self.data.routes_by_id.get(trip.route_id)
-            results.append({
-                "departure_time": secs_to_hms(departure_secs),
-                "departure_datetime": secs_to_datetime(departure_secs, day).isoformat(),
-                "trip_id": trip_id,
-                "route_id": trip.route_id,
-                "route_short_name": route.route_short_name if route else trip.route_id,
-                "trip_headsign": trip.trip_headsign,
-                "stop_sequence": stop_sequence,
-            })
+            if route_id is not None and trip.route_id != route_id:
+                continue
+            if direction_id is not None and trip.direction_id != direction_id:
+                continue
+            route = data.routes_by_id.get(trip.route_id)
+            results.append(
+                {
+                    "departure_time": secs_to_hms(departure_secs),
+                    "departure_datetime": secs_to_datetime(departure_secs, day).isoformat(),
+                    "trip_id": trip_id,
+                    "route_id": trip.route_id,
+                    "route_short_name": route.route_short_name if route else trip.route_id,
+                    "trip_headsign": trip.trip_headsign,
+                    "direction_id": trip.direction_id,
+                    "stop_sequence": stop_sequence,
+                }
+            )
             if len(results) >= limit:
                 break
         return results
@@ -674,7 +695,9 @@ class ZTMStaticSchedule:
             "route_long_name": route.route_long_name,
             "route_type": route.route_type,
             "directions": {
-                direction_id: [s.stop_name for s in self.get_stop_sequence_for_route(route_id, direction_id)]
+                direction_id: [
+                    s.stop_name for s in self.get_stop_sequence_for_route(route_id, direction_id)
+                ]
                 for direction_id in self.data.stops_by_route.get(route_id, {})
             },
         }

@@ -47,7 +47,12 @@ def test_load_keeps_singleton_identity_while_replacing_data(sample_gtfs):
         ],
         "stop_times": [
             {**sample_gtfs["stop_times"][0], "trip_id": "TX", "stop_id": "X1"},
-            {**sample_gtfs["stop_times"][1], "trip_id": "TX", "stop_id": "X2", "stop_sequence": "1"},
+            {
+                **sample_gtfs["stop_times"][1],
+                "trip_id": "TX",
+                "stop_id": "X2",
+                "stop_sequence": "1",
+            },
         ],
     }
 
@@ -76,7 +81,12 @@ def test_concurrent_loads_leave_consistent_state(sample_gtfs):
         ],
         "stop_times": [
             {**sample_gtfs["stop_times"][0], "trip_id": "TB", "stop_id": "Y1"},
-            {**sample_gtfs["stop_times"][1], "trip_id": "TB", "stop_id": "Y2", "stop_sequence": "1"},
+            {
+                **sample_gtfs["stop_times"][1],
+                "trip_id": "TB",
+                "stop_id": "Y2",
+                "stop_sequence": "1",
+            },
         ],
     }
 
@@ -158,7 +168,9 @@ def test_get_active_services(sample_gtfs):
 
 def test_get_next_departures(sample_gtfs):
     schedule = _loaded(sample_gtfs)
-    departures = schedule.get_next_departures("S1", after_secs=5 * 3600, day=date(2026, 6, 15), limit=2)
+    departures = schedule.get_next_departures(
+        "S1", after_secs=5 * 3600, day=date(2026, 6, 15), limit=2
+    )
     assert [entry["departure_time"] for entry in departures] == ["05:38:00", "25:30:00"]
     assert departures[0]["route_id"] == "R1"
 
