@@ -96,7 +96,7 @@ class ZTMService:
             calendar: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar.txt")
             feed_info: list[dict[str, str]] = self._read_csv_from_zip(zf, "feed_info.txt")
             calendar_dates: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar_dates.txt")
-            
+
         return {
             "stops": stops,
             "routes": routes,
@@ -104,7 +104,7 @@ class ZTMService:
             "trips": trips,
             "calendar": calendar,
             "feed_info": feed_info,
-            "calendar_dates": calendar_dates
+            "calendar_dates": calendar_dates,
         }
 
     def _read_csv_from_zip(self, zf: zipfile.ZipFile, filename: str) -> list[dict[str, str]]:

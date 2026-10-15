@@ -6,12 +6,23 @@ effect but return the original callable, so they can be invoked directly.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
+from fastmcp import Client
+from fastmcp.exceptions import ToolError
 
 from mcp_server.resources import list_routes_and_stops
-from mcp_server.tools import echo, search_routes, search_stops
+from mcp_server.tools import (
+    echo,
+    get_departures,
+    get_routes_for_stop,
+    search_routes,
+    search_stops,
+)
+from server import create_server
+from services.ztm_service import ZTMService
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 # --------------------------------------------------------------------------- #
@@ -33,7 +44,7 @@ def test_echo_empty_string():
 
 def test_search_stops_uses_schedule_wrapper(sample_gtfs):
     ZTMStaticSchedule.load(sample_gtfs)
-    results = search_stops("zabink")
+    results = search_stops("zabink", ctx=_ctx_with(ZTMStaticSchedule.instance()))
     assert results
     assert results[0]["stop_id"] == "S2"
     assert results[0]["stop_name"] == "Żabinko"
@@ -41,11 +52,156 @@ def test_search_stops_uses_schedule_wrapper(sample_gtfs):
 
 def test_search_routes_uses_schedule_wrapper(sample_gtfs):
     ZTMStaticSchedule.load(sample_gtfs)
-    results = search_routes("Łęczyca")
+    results = search_routes("Łęczyca", ctx=_ctx_with(ZTMStaticSchedule.instance()))
     assert results
     assert results[0]["route_id"] == "R1"
     assert results[0]["route_long_name"] == "Łęczyca"
     assert "directions" in results[0]
+
+
+def test_departures_filter_line_before_limit(sample_gtfs):
+    ZTMStaticSchedule.load(sample_gtfs)
+    result = get_departures(
+        "S2", "R2", "2026-06-15", "05:00", limit=1, ctx=_ctx_with(ZTMStaticSchedule.instance())
+    )
+    assert result["stop_name"] == "Żabinko"
+    assert result["route_short_name"] == "2"
+    assert result["data_source"] == "static_mock"
+    assert result["realtime"] is False
+    assert [d["departure_time"] for d in result["departures"]] == ["06:10:00"]
+    assert result["departures"][0]["trip_headsign"] == "Dworzec"
+
+
+def test_departures_filter_direction_before_limit(sample_gtfs):
+    sample_gtfs["trips"][1]["direction_id"] = "1"
+    ZTMStaticSchedule.load(sample_gtfs)
+    result = get_departures(
+        "S1",
+        "R1",
+        "2026-06-15",
+        "05:00",
+        direction_id=1,
+        limit=1,
+        ctx=_ctx_with(ZTMStaticSchedule.instance()),
+    )
+    assert [d["trip_id"] for d in result["departures"]] == ["T2"]
+    assert result["departures"][0]["departure_datetime"] == "2026-06-16T01:30:00"
+
+
+@pytest.mark.parametrize(
+    "stop,route,day,time,direction",
+    [
+        ("S3", "R1", "2026-06-15", "05:00", None),
+        ("S2", "R2", "2026-06-15", "06:11", None),
+        ("S2", "R2", "2026-06-14", "05:00", None),
+        ("S2", "R2", "2026-07-01", "05:00", None),
+        ("S2", "R2", "2026-06-15", "05:00", 0),
+    ],
+)
+def test_departures_no_matching_service(sample_gtfs, stop, route, day, time, direction):
+    ZTMStaticSchedule.load(sample_gtfs)
+    assert (
+        get_departures(
+            stop, route, day, time, direction, ctx=_ctx_with(ZTMStaticSchedule.instance())
+        )["departures"]
+        == []
+    )
+
+
+def test_departures_calendar_exceptions_and_inclusive_time(sample_gtfs):
+    sample_gtfs["calendar_dates"] = [
+        {"service_id": "WKD", "date": "20260614", "exception_type": "1"},
+        {"service_id": "WKD", "date": "20260615", "exception_type": "2"},
+    ]
+    ZTMStaticSchedule.load(sample_gtfs)
+    result = get_departures(
+        "S2", "R2", "2026-06-14", "06:10", ctx=_ctx_with(ZTMStaticSchedule.instance())
+    )
+    assert result == get_departures(
+        "S2", "R2", "2026-06-14", "06:10", ctx=_ctx_with(ZTMStaticSchedule.instance())
+    )
+    assert result["departures"][0]["departure_time"] == "06:10:00"
+    assert (
+        get_departures(
+            "S2", "R2", "2026-06-15", "06:10", ctx=_ctx_with(ZTMStaticSchedule.instance())
+        )["departures"]
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"date": "2026-02-30"},
+        {"date": "20260615"},
+        {"time": "24:00"},
+        {"time": "06:60"},
+        {"time": "6:10"},
+        {"limit": 0},
+        {"limit": -1},
+        {"limit": 101},
+        {"direction_id": 2},
+        {"stop_id": "missing"},
+        {"route_id": "missing"},
+    ],
+)
+def test_departures_invalid_input(sample_gtfs, override):
+    ZTMStaticSchedule.load(sample_gtfs)
+    arguments = {
+        "stop_id": "S2",
+        "route_id": "R2",
+        "date": "2026-06-15",
+        "time": "06:10",
+    }
+    with pytest.raises(ToolError):
+        get_departures(**(arguments | override), ctx=_ctx_with(ZTMStaticSchedule.instance()))
+
+
+def test_routes_for_stop_are_sorted_and_serializable(sample_gtfs):
+    ZTMStaticSchedule.load(sample_gtfs)
+    result = get_routes_for_stop("S2", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+    assert [r["route_id"] for r in result] == ["R1", "R2"]
+    assert result[0]["route_short_name"] == "1"
+    assert result == get_routes_for_stop("S2", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+    with pytest.raises(ToolError, match="search_stops"):
+        get_routes_for_stop("missing", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+
+
+def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
+    ZTMStaticSchedule.load(sample_gtfs)
+
+    monkeypatch.setattr(ZTMService, "start_daily_refresh", lambda self: None)
+    monkeypatch.setattr(ZTMService, "stop_daily_refresh", lambda self: None)
+
+    async def check():
+        async with Client(create_server()) as client:
+            # The lifespan has captured the schedule; tools must not fetch the singleton.
+            def unexpected_instance():
+                raise AssertionError("Tool bypassed lifespan storage")
+
+            monkeypatch.setattr(ZTMStaticSchedule, "instance", unexpected_instance)
+            tools = await client.list_tools()
+            assert all("ctx" not in tool.inputSchema["properties"] for tool in tools)
+            names = {tool.name for tool in tools}
+            stops = await client.call_tool("search_stops", {"query": "Rynek"})
+            assert stops.data[0]["stop_id"] == "S1"
+            found_routes = await client.call_tool("search_routes", {"query": "R1"})
+            assert found_routes.data[0]["route_id"] == "R1"
+            assert {"get_departures", "get_routes_for_stop"} <= names
+            departures = await client.call_tool(
+                "get_departures",
+                {
+                    "stop_id": "S2",
+                    "route_id": "R2",
+                    "date": "2026-06-15",
+                    "time": "06:10",
+                },
+            )
+            assert departures.data["departures"][0]["departure_time"] == "06:10:00"
+            routes = await client.call_tool("get_routes_for_stop", {"stop_id": "S2"})
+            assert [r["route_id"] for r in routes.data] == ["R1", "R2"]
+
+    asyncio.run(check())
 
 
 # --------------------------------------------------------------------------- #
