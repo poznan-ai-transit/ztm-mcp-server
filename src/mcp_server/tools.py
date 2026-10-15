@@ -6,13 +6,21 @@ from dataclasses import asdict
 from datetime import date as calendar_date
 from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
 from logging_config import logger
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
+
+
+def _get_schedule(ctx: Context) -> ZTMStaticSchedule:
+    """Read the shared schedule published by the server lifespan."""
+    request_context = ctx.request_context
+    if request_context is None:
+        raise RuntimeError("Tool requires an active MCP request context")
+    return request_context.lifespan_context["ztm_static_storage"]
 
 
 @mcp_tools.tool()
@@ -24,7 +32,7 @@ def echo(text: str) -> str:
 
 
 @mcp_tools.tool()
-def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
+def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str, Any]]:
     """
     Search transit stops by name.
 
@@ -34,7 +42,7 @@ def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
     - os. Sobieskiego
     """
     logger.debug("search_stops: query=%r limit=%d", query, limit)
-    schedule: ZTMStaticSchedule = ZTMStaticSchedule.instance()
+    schedule: ZTMStaticSchedule = _get_schedule(ctx)
     matched_stops = [
         {**asdict(match.stop), "score": match.score}
         for match in schedule.fuzzy_search_stops(query, limit=limit)
@@ -44,7 +52,7 @@ def search_stops(query: str, limit: int = 10) -> list[dict[str, str]]:
 
 
 @mcp_tools.tool()
-def search_routes(query: str, limit: int = 10) -> list[dict[str, str]]:
+def search_routes(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str, Any]]:
     """
     Search routes by number or name.
 
@@ -53,7 +61,7 @@ def search_routes(query: str, limit: int = 10) -> list[dict[str, str]]:
     - 221
     - SYPNIEWO - GARBARY PKM
     """
-    schedule: ZTMStaticSchedule = ZTMStaticSchedule.instance()
+    schedule: ZTMStaticSchedule = _get_schedule(ctx)
     logger.debug("search_routes: query=%r limit=%d", query, limit)
     routes = schedule.search_routes(query, limit)
     logger.debug("search_routes returned %d routes", len(routes))
@@ -61,13 +69,13 @@ def search_routes(query: str, limit: int = 10) -> list[dict[str, str]]:
 
 
 @mcp_tools.tool()
-def get_routes_for_stop(stop_id: str) -> list[dict[str, Any]]:
+def get_routes_for_stop(stop_id: str, *, ctx: Context) -> list[dict[str, Any]]:
     """List static mock routes serving a stop. Resolve stop_id with search_stops first.
 
     This lists routes in the dataset, regardless of their operating date.
     """
     logger.debug("get_routes_for_stop: stop_id=%r", stop_id)
-    schedule = ZTMStaticSchedule.instance()
+    schedule = _get_schedule(ctx)
     if schedule.get_stop(stop_id) is None:
         raise ToolError("Unknown stop_id. Use search_stops to find a valid stop.")
     routes = schedule.get_routes_for_stop(stop_id)
@@ -83,6 +91,8 @@ def get_departures(
     time: str,
     direction_id: int | None = None,
     limit: int = 5,
+    *,
+    ctx: Context,
 ) -> dict[str, Any]:
     """Return scheduled departures for a line and stop from static mock GTFS.
 
@@ -115,7 +125,7 @@ def get_departures(
     if not 1 <= limit <= 100:
         raise ToolError("Invalid limit. Use a number from 1 to 100.")
 
-    schedule = ZTMStaticSchedule.instance()
+    schedule = _get_schedule(ctx)
     stop = schedule.get_stop(stop_id)
     route = schedule.get_route(route_id)
     if stop is None:
