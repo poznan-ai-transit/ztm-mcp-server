@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 from fastmcp import Client, FastMCP
 
+from ini import Ini
 from server import create_server, run_server
 from services.ztm_service import ZTMService
 
@@ -37,6 +38,7 @@ def test_server_starts_and_stops_service(monkeypatch):
 
 
 def test_run_server_passes_http_settings(monkeypatch):
+    monkeypatch.setattr("server.ini", Ini(server_host="127.0.0.1", server_port=9000))
     server: FastMCP[Any] = create_server()
     run = Mock()
     monkeypatch.setattr(server, "run", run)
@@ -45,6 +47,6 @@ def test_run_server_passes_http_settings(monkeypatch):
 
     run.assert_called_once()
     assert run.call_args.kwargs["transport"] == "http"
-    assert run.call_args.kwargs["host"] == "0.0.0.0"
-    assert run.call_args.kwargs["port"] == 8000
+    assert run.call_args.kwargs["host"] == "127.0.0.1"
+    assert run.call_args.kwargs["port"] == 9000
     assert run.call_args.kwargs["stateless_http"] is True

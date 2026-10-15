@@ -5,9 +5,11 @@ from __future__ import annotations
 import io
 import zipfile
 from datetime import datetime
+from unittest.mock import Mock
 
 import pytest
 
+from ini import Ini
 from services.ztm_service import ZTMService
 
 # --------------------------------------------------------------------------- #
@@ -142,3 +144,25 @@ def test_mock_gtfs_zip_contains_required_gtfs_files(service):
     with service._mock_gtfs_zip() as zf:
         names = set(zf.namelist())
     assert {"stops.txt", "routes.txt", "stop_times.txt"} <= names
+
+
+def test_fetch_static_gtfs_uses_configuration(service, monkeypatch):
+    monkeypatch.setattr(
+        "services.ztm_service.ini",
+        Ini(gtfs_endpoint="https://example.test/gtfs", request_timeout_seconds=12),
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr("stops.txt", "stop_id,stop_name\n")
+    response = Mock(content=buf.getvalue())
+    get = Mock(return_value=response)
+    monkeypatch.setattr("services.ztm_service.requests.get", get)
+
+    with service._fetch_static_gtfs_zip() as archive:
+        assert "stops.txt" in archive.namelist()
+    get.assert_called_once_with("https://example.test/gtfs", timeout=12)
+    response.raise_for_status.assert_called_once_with()
+
+    with service._fetch_static_gtfs_zip("https://example.test/override"):
+        pass
+    get.assert_called_with("https://example.test/override", timeout=12)
