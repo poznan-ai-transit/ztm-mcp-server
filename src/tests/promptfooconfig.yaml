@@ -19,9 +19,68 @@ providers:
           url: http://localhost:8000/mcp
 
 prompts:
-  - 'You are a helpful assistant. You must use the tools available to answer the question. {{question}}'
+  - >-
+      You are a helpful transit assistant. Use available tools when the required
+      information is available. Otherwise, ask one concise clarification question
+      for the missing details and wait before calling tools. Reuse information
+      already provided in the conversation. Never invent stops, locations, lines,
+      IDs, dates, or times. Departures require a stop, line, service date, and time.
+      Resolve names and line numbers with search_stops and search_routes, and ask
+      before selecting an ambiguous match. Optional direction and limit may be
+      omitted. These tools do not provide journey planning. {{question}}
 
 tests:
+  # These negative assertions use the same MCP result markers as the existing
+  # positive cases below. Also inspect provider tool-call traces when reviewing
+  # results: response wording alone cannot prove that no tool was called.
+  - vars:
+      question: 'When does line 24 leave on 2026-06-15 after 08:00?'
+    assert:
+      - type: not-contains
+        value: 'MCP Tool Result ('
+      - type: llm-rubric
+        value: 'Asks which stop to depart from, without inventing a stop or departure time.'
+
+  - vars:
+      question: 'When is the departure from Rondo Kaponiera on 2026-06-15 after 08:00?'
+    assert:
+      - type: not-contains
+        value: 'MCP Tool Result ('
+      - type: llm-rubric
+        value: 'Asks which line or route the user wants, without guessing one.'
+
+  - vars:
+      question: 'When does line 24 leave Rondo Kaponiera?'
+    assert:
+      - type: not-contains
+        value: 'MCP Tool Result ('
+      - type: llm-rubric
+        value: 'Asks for the date and time together, without asking again for the supplied stop or line.'
+
+  - vars:
+      question: 'When is my departure?'
+    assert:
+      - type: not-contains
+        value: 'MCP Tool Result ('
+      - type: llm-rubric
+        value: 'Asks concisely for stop, line, date, and time, without inventing them.'
+
+  - vars:
+      question: 'Which lines serve my stop?'
+    assert:
+      - type: not-contains
+        value: 'MCP Tool Result ('
+      - type: llm-rubric
+        value: 'Asks which stop, without requiring a line, date, or time.'
+
+  - vars:
+      question: 'Conversation so far: User: My stop is Rondo Kaponiera. Assistant: What would you like to check? User: Check whether that stop exists.'
+    assert:
+      - type: contains
+        value: 'MCP Tool Result (search_stops)'
+      - type: llm-rubric
+        value: 'Uses Rondo Kaponiera from the conversation without asking for the stop again.'
+
   - vars:
       question: 'List the names of every tool or function you currently have access to.'
     assert:

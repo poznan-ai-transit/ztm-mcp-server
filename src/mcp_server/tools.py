@@ -36,6 +36,10 @@ def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str,
     """
     Search transit stops by name.
 
+    Before calling, obtain a stop name from the conversation. If missing, ask
+    which stop and wait for the answer. Do not guess a name or use an empty query.
+    If matches are ambiguous, ask the user before selecting a stop_id.
+
     Examples:
     - Poznań Główny
     - Rondo Kaponiera
@@ -56,6 +60,10 @@ def search_routes(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str
     """
     Search routes by number or name.
 
+    Before calling, obtain a line number or route name from the conversation.
+    If missing, ask which line and wait for the answer. Do not guess or use an
+    empty query. If matches are ambiguous, ask before selecting a route_id.
+
     Examples:
     - 904
     - 221
@@ -73,6 +81,9 @@ def get_routes_for_stop(stop_id: str, *, ctx: Context) -> list[dict[str, Any]]:
     """List static mock routes serving a stop. Resolve stop_id with search_stops first.
 
     This lists routes in the dataset, regardless of their operating date.
+    If the stop is missing from the conversation, ask which stop and wait for
+    the answer. Reuse a previously resolved stop_id when applicable; never
+    invent one. This lookup does not require a line, date, or time.
     """
     logger.debug("get_routes_for_stop: stop_id=%r", stop_id)
     schedule = _get_schedule(ctx)
@@ -95,6 +106,12 @@ def get_departures(
     ctx: Context,
 ) -> dict[str, Any]:
     """Return scheduled departures for a line and stop from static mock GTFS.
+
+    Before calling, obtain the stop, line, service date, and time from the
+    conversation. Ask one concise question for missing details and wait for
+    the answer. Reuse provided details and previously resolved IDs; never
+    guess them. Clarify ambiguous search matches before selecting IDs.
+    Direction and limit are optional and do not require clarification.
 
     Resolve IDs using search_stops and search_routes. Date is the GTFS service
     day (YYYY-MM-DD), and time is HH:MM (00:00 through 23:59), inclusive.
