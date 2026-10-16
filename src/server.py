@@ -4,6 +4,7 @@ from fastmcp import FastMCP
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
+from ini import ini
 from logging_config import logger
 from mcp_server.lifespans import ztm_service_lifespan
 from mcp_server.resources import mcp_resources
@@ -34,11 +35,13 @@ def create_server() -> FastMCP:
 
 def run_server(mcp: FastMCP) -> None:
     """Run a configured server using the application's HTTP settings."""
-    logger.info("Starting MCP HTTP server on 0.0.0.0:8000 (stateless HTTP)")
+    logger.info(
+        "Starting MCP HTTP server on %s:%s (stateless HTTP)", ini.server_host, ini.server_port
+    )
     mcp.run(
         transport="http",
-        host="0.0.0.0",
-        port=8000,
+        host=ini.server_host,
+        port=ini.server_port,
         stateless_http=True,
         middleware=[
             Middleware(

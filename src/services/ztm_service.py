@@ -11,6 +11,7 @@ from typing import Any
 
 import requests
 
+from ini import ini
 from logging_config import logger
 from services.ztm_static_schedule import ZTMStaticSchedule
 
@@ -58,19 +59,19 @@ class ZTMService:
         storage: ZTMStaticSchedule = ZTMStaticSchedule.instance()
 
         def _runner() -> None:
-            backoff = 60
+            backoff = ini.refresh_retry_initial_seconds
             while not self._stop_event.is_set():
                 try:
                     logger.info("Refreshing static GTFS schedule")
                     storage.load(self.get_static_gtfs())
-                    backoff = 60
+                    backoff = ini.refresh_retry_initial_seconds
                     delay = self._seconds_until_next_six_am(datetime.now())
                     logger.info("GTFS refresh completed; next refresh in %.0f seconds", delay)
                     self._stop_event.wait(timeout=delay)
                 except Exception:
                     logger.exception("GTFS refresh failed; retrying in %s seconds", backoff)
                     self._stop_event.wait(timeout=backoff)
-                    backoff: int = min(backoff * 2, 1800)
+                    backoff = min(backoff * 2, ini.refresh_retry_max_seconds)
 
         self._thread = threading.Thread(
             target=_runner, name="ztm-static-schedule-refresh", daemon=True
@@ -124,10 +125,11 @@ class ZTMService:
             next_run = next_run + timedelta(days=1)
         return (next_run - now).total_seconds()
 
-    def _fetch_static_gtfs_zip(
-        self, gtfs_endpoint: str = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
-    ) -> zipfile.ZipFile:
-        resp: requests.Response = requests.get(gtfs_endpoint, timeout=30)
+    def _fetch_static_gtfs_zip(self, gtfs_endpoint: str | None = None) -> zipfile.ZipFile:
+        resp: requests.Response = requests.get(
+            gtfs_endpoint if gtfs_endpoint is not None else ini.gtfs_endpoint,
+            timeout=ini.request_timeout_seconds,
+        )
         resp.raise_for_status()
         return zipfile.ZipFile(io.BytesIO(resp.content))
 
