@@ -1,7 +1,7 @@
 # Testy agenta ZTM Poznan (Promptfoo, 27 przypadkow).
-#
+# 
 # Uruchomienie (z src/tests):
-#   npx promptfoo eval -c promptfooconfig.gold.yaml --no-cache -o results.json
+#   npx promptfoo eval -c promptfooconfig.yaml --no-cache -o results.json
 #   dodaj --repeat 5, zeby zmierzyc niedeterminizm
 #
 # Metryki (wynik 0-1 w "namedScores"):
