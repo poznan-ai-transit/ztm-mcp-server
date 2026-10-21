@@ -14,7 +14,7 @@
 # tekst XML (<function_calls>), wiec asercje sprawdzaja nazwe narzedzia w obu formatach.
 
 providers:
-  - id: openrouter:anthropic/claude-haiku-4.5
+  - id: openrouter:openai/gpt-4o-mini
     config:
       apiKey: '{{env.OPENROUTER_API_KEY}}'
       mcp:

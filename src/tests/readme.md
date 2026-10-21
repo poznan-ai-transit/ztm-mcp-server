@@ -4,6 +4,6 @@ OPENROUTER_API_KEY=klucz
 Następnie:
 ```bash
 cd src/tests
-
-npx promptfoo eval --no-cache --env-file -o results.json
+npm install
+npx promptfoo eval --no-cache -o results.json
 ```
