@@ -102,3 +102,4 @@ entirely against the bundled mock data — no network access required.
 | [docs/01-product-goal.md](docs/01-product-goal.md) | Project description and product goal |
 | [docs/02-mvp.md](docs/02-mvp.md) | MVP boundaries, mock phase, and core behavior |
 | [docs/03-requirements.md](docs/03-requirements.md) | Functional and non-functional requirements for the MVP |
+| [docs/04-mcp-tool-contract.md](docs/04-mcp-tool-contract.md) | Tool inputs, outputs, JSON examples, identifier resolution, and errors |
