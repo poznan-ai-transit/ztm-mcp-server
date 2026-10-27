@@ -261,6 +261,37 @@ class ZTMStaticSchedule:
         """Feed publisher metadata, or None if feed_info.txt was absent."""
         return self.data.feed_info
 
+    @property
+    def available_date_range(self) -> tuple[date, date] | None:
+        """Published feed bounds, falling back to service calendars and added dates."""
+        data = self.data
+        if data.feed_info is not None:
+            return data.feed_info.start_date, data.feed_info.end_date
+
+        dates: list[date] = []
+        for service in data.services.values():
+            # Exception-only services use unbounded sentinel dates.
+            if (service.start_date, service.end_date) != (date.min, date.max):
+                dates.extend((service.start_date, service.end_date))
+            dates.extend(service.added_dates)
+        return (min(dates), max(dates)) if dates else None
+
+    def validate_date_range(self, start_date: date, end_date: date | None = None) -> None:
+        """Require a single date or an ordered, inclusive range within the loaded feed."""
+        available_range = self.available_date_range
+        if available_range is None:
+            raise ValueError(
+                "The GTFS dataset has no available date range. Load schedule data first."
+            )
+
+        available_start, available_end = available_range
+        end_date = end_date or start_date
+        if not available_start <= start_date <= end_date <= available_end:
+            raise ValueError(
+                f"Requested date range {start_date} to {end_date} is not supported. "
+                f"Supported date range: {available_start} to {available_end} (inclusive)."
+            )
+
     # -- loading -----------------------------------------------------------
 
     @classmethod
