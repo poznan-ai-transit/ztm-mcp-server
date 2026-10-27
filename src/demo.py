@@ -1,15 +1,15 @@
-
 import asyncio
 import json
 import os
 import time
-from dotenv import load_dotenv
-from pathlib import Path
-import streamlit as st
 import traceback
-from openai import OpenAI
+from pathlib import Path
+
+import streamlit as st
+from dotenv import load_dotenv
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from openai import OpenAI
 
 ENV_PATH = Path(__file__).parent / "tests" / ".env"
 load_dotenv(ENV_PATH)
@@ -94,100 +94,95 @@ async def run_agent(messages, trace_container):
     ]
 
     # Connect to the existing MCP server.
-    async with streamablehttp_client(MCP_URL) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    async with (
+        streamablehttp_client(MCP_URL) as (read, write, _),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        discovered = await session.list_tools()
 
-            discovered = await session.list_tools()
+        # Convert actual MCP definitions into OpenAI-compatible tools.
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description or tool.name,
+                    "parameters": tool.inputSchema,
+                },
+            }
+            for tool in discovered.tools
+        ]
 
-            # Convert actual MCP definitions into OpenAI-compatible tools.
-            tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description or tool.name,
-                        "parameters": tool.inputSchema,
-                    },
+        # Run the model/tool loop.
+        for _ in range(MAX_TOOL_ROUNDS):
+            response = await asyncio.to_thread(
+                llm.chat.completions.create,
+                model=MODEL,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+            )
+
+            assistant_message = response.choices[0].message
+
+            if not assistant_message.tool_calls:
+                return assistant_message.content or "", trace
+
+            # Preserve the assistant's tool-call message for the next turn.
+            messages.append(assistant_message.model_dump(exclude_none=True))
+
+            for tool_call in assistant_message.tool_calls:
+                name = tool_call.function.name
+                arguments = json.loads(tool_call.function.arguments or "{}")
+
+                entry = {
+                    "name": name,
+                    "arguments": arguments,
+                    "status": "running",
                 }
-                for tool in discovered.tools
-            ]
+                trace.append(entry)
+                render_trace(trace_container, trace)
 
-            # Run the model/tool loop.
-            for _ in range(MAX_TOOL_ROUNDS):
-                response = await asyncio.to_thread(
-                    llm.chat.completions.create,
-                    model=MODEL,
-                    messages=messages,
-                    tools=tools,
-                    tool_choice="auto",
-                )
+                started = time.perf_counter()
 
-                assistant_message = response.choices[0].message
+                try:
+                    result = await session.call_tool(name, arguments)
+                    entry["duration"] = time.perf_counter() - started
 
-                if not assistant_message.tool_calls:
-                    return assistant_message.content or "", trace
+                    # Keep the complete textual result visible.
+                    output = []
+                    for item in result.content:
+                        if hasattr(item, "text"):
+                            output.append(item.text)
+                        else:
+                            output.append(str(item))
 
-                # Preserve the assistant's tool-call message for the next turn.
-                messages.append(
-                    assistant_message.model_dump(exclude_none=True)
-                )
+                    result_text = "\n".join(output)
 
-                for tool_call in assistant_message.tool_calls:
-                    name = tool_call.function.name
-                    arguments = json.loads(
-                        tool_call.function.arguments or "{}"
-                    )
+                    if result.isError:
+                        entry["status"] = "error"
+                        entry["error"] = result_text
+                    else:
+                        entry["status"] = "success"
 
-                    entry = {
-                        "name": name,
-                        "arguments": arguments,
-                        "status": "running",
-                    }
-                    trace.append(entry)
+                    entry["result"] = result_text
                     render_trace(trace_container, trace)
 
-                    started = time.perf_counter()
+                except Exception as exc:
+                    entry["status"] = "error"
+                    entry["duration"] = time.perf_counter() - started
+                    entry["error"] = str(exc)
+                    result_text = f"Tool execution failed: {exc}"
+                    render_trace(trace_container, trace)
 
-                    try:
-                        result = await session.call_tool(name, arguments)
-                        entry["duration"] = (
-                            time.perf_counter() - started
-                        )
-
-                        # Keep the complete textual result visible.
-                        output = []
-                        for item in result.content:
-                            if hasattr(item, "text"):
-                                output.append(item.text)
-                            else:
-                                output.append(str(item))
-
-                        result_text = "\n".join(output)
-
-                        if result.isError:
-                            entry["status"] = "error"
-                            entry["error"] = result_text
-                        else:
-                            entry["status"] = "success"
-
-                        entry["result"] = result_text
-                        render_trace(trace_container, trace)
-
-                    except Exception as exc:
-                        entry["status"] = "error"
-                        entry["duration"] = (
-                            time.perf_counter() - started
-                        )
-                        entry["error"] = str(exc)
-                        result_text = f"Tool execution failed: {exc}"
-                        render_trace(trace_container, trace)
-
-                    messages.append({
+                messages.append(
+                    {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": result_text,
-                    })
+                    }
+                )
 
     return (
         "I couldn't complete the request within the tool-call limit.",
@@ -230,13 +225,9 @@ for index, message in enumerate(st.session_state.messages):
         if message["role"] == "assistant":
             old_trace = st.session_state.traces.get(index, [])
             if old_trace:
-                with st.expander(
-                    f"🔧 {len(old_trace)} MCP tool call(s)"
-                ):
+                with st.expander(f"🔧 {len(old_trace)} MCP tool call(s)"):
                     for i, call in enumerate(old_trace, 1):
-                        st.markdown(
-                            f"**{i}. {call['name']} — {call['status']}**"
-                        )
+                        st.markdown(f"**{i}. {call['name']} — {call['status']}**")
                         st.json(call["arguments"])
                         if "result" in call:
                             st.code(call["result"])
@@ -244,10 +235,12 @@ for index, message in enumerate(st.session_state.messages):
                             st.error(call["error"])
 
 if question := st.chat_input("Ask about public transport in Poznań…"):
-    st.session_state.messages.append({
-        "role": "user",
-        "content": question,
-    })
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": question,
+        }
+    )
 
     with st.chat_message("user"):
         st.markdown(question)
@@ -279,10 +272,12 @@ if question := st.chat_input("Ask about public transport in Poznań…"):
             print(traceback.format_exc())
 
         assistant_index = len(st.session_state.messages)
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": answer,
-        })
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+            }
+        )
         st.session_state.traces[assistant_index] = trace
 
     st.rerun()

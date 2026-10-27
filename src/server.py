@@ -33,6 +33,7 @@ Limitations:
   public transport service for other cities.
 """
 
+
 def create_server() -> FastMCP:
     """Create a configured server without starting its lifespan or transport."""
 
