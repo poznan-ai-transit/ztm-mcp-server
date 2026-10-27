@@ -10,6 +10,28 @@ from mcp_server.lifespans import ztm_service_lifespan
 from mcp_server.resources import mcp_resources
 from mcp_server.tools import mcp_tools
 
+SERVER_INSTRUCTIONS = """
+This MCP server provides information about public transport in Poznań,
+Poland, operated by ZTM Poznań.
+
+Tool usage:
+- Use search_stops to verify stop names and find matching stops.
+- Use search_routes to verify route numbers and find matching routes.
+- Use the appropriate tool when answering factual questions about stops
+  or routes. Do not rely on model memory for this information.
+- Use the tool arguments to search for the stop name or route number
+  provided by the user.
+- Treat tool results as the source of truth. Do not invent results or
+  claim that a stop or route exists when the tools do not confirm it.
+- When there are multiple stops with the same name, always consider
+  routes from all of them.
+
+Limitations:
+- This server does not provide live departure information.
+- Do not infer departure times from stop or route search results.
+- The server's domain is Poznań public transport; it is not a general
+  public transport service for other cities.
+"""
 
 def create_server() -> FastMCP:
     """Create a configured server without starting its lifespan or transport."""
@@ -18,6 +40,7 @@ def create_server() -> FastMCP:
 
     mcp = FastMCP(
         "ztm-poznan",
+        instructions=SERVER_INSTRUCTIONS,
         strict_input_validation=True,
         mask_error_details=True,
         lifespan=ztm_service_lifespan,

@@ -1,0 +1,4 @@
+streamlit
+openai
+mcp[cli]
+python-dotenv
