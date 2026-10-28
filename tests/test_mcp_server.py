@@ -59,6 +59,29 @@ def test_search_routes_uses_schedule_wrapper(sample_gtfs):
     assert "directions" in results[0]
 
 
+@pytest.mark.parametrize("search", [search_stops, search_routes])
+@pytest.mark.parametrize("query", ["", " ", "\t\n"])
+def test_search_rejects_blank_queries(search, query):
+    with pytest.raises(ToolError, match="Invalid query"):
+        search(query, ctx=_ctx_with(None))
+
+
+@pytest.mark.parametrize("search", [search_stops, search_routes])
+@pytest.mark.parametrize("limit", [-1, 0, 101, True, 1.5])
+def test_search_rejects_invalid_limits(search, limit):
+    with pytest.raises(ToolError, match="Invalid limit. Use an integer from 1 to 100."):
+        search("Rynek", limit=limit, ctx=_ctx_with(None))
+
+
+@pytest.mark.parametrize("search,query", [(search_stops, "Rynek"), (search_routes, "R1")])
+@pytest.mark.parametrize("limit", [1, 100])
+def test_search_accepts_limit_boundaries(sample_gtfs, search, query, limit):
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
+    result = search(query, limit=limit, ctx=_ctx_with(schedule))
+    assert 1 <= len(result) <= limit
+    assert search("zzzzzzzzzzzzzzzzzzzzzz", limit=limit, ctx=_ctx_with(schedule)) == []
+
+
 def test_departures_filter_line_before_limit(sample_gtfs):
     ZTMStaticSchedule.load(sample_gtfs)
     result = get_departures(
@@ -162,6 +185,8 @@ def test_departures_calendar_exceptions_and_inclusive_time(sample_gtfs):
         {"limit": 0},
         {"limit": -1},
         {"limit": 101},
+        {"limit": True},
+        {"limit": 1.5},
         {"direction_id": 2},
         {"stop_id": "missing"},
         {"route_id": "missing"},
@@ -189,6 +214,19 @@ def test_routes_for_stop_are_sorted_and_serializable(sample_gtfs):
         get_routes_for_stop("missing", ctx=_ctx_with(ZTMStaticSchedule.instance()))
 
 
+def _resolve_schema(root: dict, node: dict) -> dict:
+    """Follow local JSON references while also accepting inline schemas."""
+    seen = set()
+    while "$ref" in node:
+        ref = node["$ref"]
+        assert ref.startswith("#/") and ref not in seen, ref
+        seen.add(ref)
+        node = root
+        for part in ref[2:].split("/"):
+            node = node[part.replace("~1", "/").replace("~0", "~")]
+    return node
+
+
 def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
     ZTMStaticSchedule.load(sample_gtfs)
 
@@ -204,11 +242,45 @@ def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
             monkeypatch.setattr(ZTMStaticSchedule, "instance", unexpected_instance)
             tools = await client.list_tools()
             assert all("ctx" not in tool.inputSchema["properties"] for tool in tools)
+            by_name = {tool.name: tool for tool in tools}
+            for name in ("get_routes_for_stop", "get_departures"):
+                stop_id_schema = by_name[name].inputSchema["properties"]["stop_id"]
+                assert stop_id_schema["type"] == "string"
+                assert "stop_id" in by_name[name].inputSchema["required"]
+                assert "search_stops" in stop_id_schema["description"]
+                assert "leading zeros" in stop_id_schema["description"]
+                assert "stop_sequence" in stop_id_schema["description"]
+            for name, fields in (
+                ("search_stops", {"stop_id", "stop_code", "score"}),
+                ("search_routes", {"route_id", "directions", "score"}),
+                ("get_routes_for_stop", {"route_id", "agency_id", "route_type"}),
+            ):
+                schema = by_name[name].outputSchema
+                assert schema is not None
+                result = _resolve_schema(schema, schema)
+                # FastMCP wraps list outputs in a result property for MCP's
+                # object output schema; model fields may be inline or referenced.
+                if result.get("type") == "object":
+                    assert "result" in result["required"]
+                    result = _resolve_schema(schema, result["properties"]["result"])
+                assert result["type"] == "array"
+                item = _resolve_schema(schema, result["items"])
+                assert fields <= item["properties"].keys()
+                assert fields <= set(item["required"])
+            schema = by_name["get_departures"].outputSchema
+            assert schema is not None
+            response = _resolve_schema(schema, schema)
+            departures_schema = _resolve_schema(schema, response["properties"]["departures"])
+            assert departures_schema["type"] == "array"
+            departure = _resolve_schema(schema, departures_schema["items"])
+            assert {"departure_time", "departure_datetime", "stop_sequence"} <= (
+                departure["properties"].keys()
+            )
             names = {tool.name for tool in tools}
             stops = await client.call_tool("search_stops", {"query": "Rynek"})
-            assert stops.data[0]["stop_id"] == "S1"
+            assert stops.structured_content["result"][0]["stop_id"] == "S1"
             found_routes = await client.call_tool("search_routes", {"query": "R1"})
-            assert found_routes.data[0]["route_id"] == "R1"
+            assert found_routes.structured_content["result"][0]["route_id"] == "R1"
             assert {"get_departures", "get_routes_for_stop"} <= names
             departure_arguments = {
                 "stop_id": "S2",
@@ -217,13 +289,13 @@ def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
                 "time": "06:10",
             }
             departures = await client.call_tool("get_departures", departure_arguments)
-            assert departures.data["departures"][0]["departure_time"] == "06:10:00"
+            assert departures.structured_content["departures"][0]["departure_time"] == "06:10:00"
             with pytest.raises(ToolError, match="Supported date range: 2026-06-01 to 2026-06-30"):
                 await client.call_tool(
                     "get_departures", departure_arguments | {"date": "2026-07-01"}
                 )
             routes = await client.call_tool("get_routes_for_stop", {"stop_id": "S2"})
-            assert [r["route_id"] for r in routes.data] == ["R1", "R2"]
+            assert [r["route_id"] for r in routes.structured_content["result"]] == ["R1", "R2"]
 
     asyncio.run(check())
 

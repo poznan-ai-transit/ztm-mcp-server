@@ -9,9 +9,8 @@ delays, predicted departures, and GTFS-RT trip updates are outside this contract
 JSON outputs below show the logical tool result, without MCP transport wrappers.
 Examples use the synthetic IDs and data from `tests/conftest.py`; these are not
 IDs to copy into requests against the bundled dataset. `ctx` is supplied by the
-server and must not be included in tool arguments. Current return annotations
-use generic dictionaries; this document describes their fields but does not add
-typed output models or change runtime validation.
+server and must not be included in tool arguments. Typed response contracts in
+`src/mcp_server/schemas.py` describe the static GTFS output fields.
 
 ## Resolving identifiers
 
@@ -51,7 +50,7 @@ Search stop names using normalized exact, partial, and fuzzy matching.
 | Input | JSON type | Required | Meaning |
 |---|---|---|---|
 | `query` | string | yes | Stop name supplied in the conversation; do not send an empty query. |
-| `limit` | integer | no | Maximum results; default `10`. Use a positive integer. |
+| `limit` | integer | no | Maximum results; default `10`, allowed range `1` to `100`. |
 
 Returns an array sorted by descending match score. Each item contains:
 
@@ -86,10 +85,9 @@ Output:
 ]
 ```
 
-No matches returns `[]`. An empty or whitespace-only query also currently
-returns `[]`, although agents are instructed to ask for a name instead.
-The implementation does not explicitly validate search limit bounds; positive
-limits are the caller convention, not an enforced range.
+No matches returns `[]`. An empty or whitespace-only query raises `ToolError`:
+`Invalid query. Provide a non-empty stop or route name/number.`
+Invalid limits raise `ToolError`: `Invalid limit. Use an integer from 1 to 100.`
 
 ## `search_routes`
 
@@ -99,7 +97,7 @@ the user before selecting an ID.
 | Input | JSON type | Required | Meaning |
 |---|---|---|---|
 | `query` | string | yes | Line number or route name from the conversation. |
-| `limit` | integer | no | Maximum results; default `10`. Use a positive integer. |
+| `limit` | integer | no | Maximum results; default `10`, allowed range `1` to `100`. |
 
 Returns an array sorted by descending match score. Each item contains:
 
@@ -133,8 +131,8 @@ Output:
 ]
 ```
 
-No matches or an empty normalized query returns `[]`. As with `search_stops`,
-search limit bounds are not explicitly validated. Neither search requires a
+No matches returns `[]`. Blank queries and invalid limits raise the same
+`ToolError` messages as `search_stops`. Neither search requires a
 date or guarantees that the returned stop or route has service on a given date.
 
 ## `get_routes_for_stop`
@@ -249,7 +247,8 @@ Output:
 `date` selects a GTFS service day, not a rolling 24-hour window. For service day
 `2026-06-15`, `25:30:00` corresponds to `2026-06-16T01:30:00`. It can appear in
 that service day's results even though input `time` cannot exceed `23:59`.
-Returned datetimes carry no timezone offset; do not interpret them as UTC.
+Input times and returned datetimes use Europe/Warsaw local time. Returned
+datetimes carry no timezone offset; do not interpret them as UTC.
 The tool searches only the requested service day and respects weekly service
 calendars and date exceptions. It does not automatically include overnight trips
 from the previous service day or advance to the next service day.
@@ -272,7 +271,7 @@ tool failures, not successful response objects with an `error` field.
 | Impossible calendar date | `Invalid date. Provide a valid calendar date as YYYY-MM-DD.` |
 | Invalid time | `Invalid time. Use HH:MM from 00:00 through 23:59.` |
 | Direction other than `0`, `1`, or null | `Invalid direction_id. Use 0 or 1, or omit it.` |
-| Limit outside `1`–`100` | `Invalid limit. Use a number from 1 to 100.` |
+| Limit outside `1`–`100` | `Invalid limit. Use an integer from 1 to 100.` |
 | Unknown stop | `Unknown stop_id. Use search_stops to find a valid stop.` |
 | Unknown route | `Unknown route_id. Use search_routes to find a valid line.` |
 
