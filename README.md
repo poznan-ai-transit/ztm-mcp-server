@@ -33,6 +33,13 @@ npx @modelcontextprotocol/inspector
 
 Stateless HTTP is enabled to avoid missing session ID errors.
 
+## Demo running
+
+```bash
+pip install -r requirements-demo.txt
+streamlit run src/demo.py
+```
+
 ## Examples
 
 | Script | What it does |

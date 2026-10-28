@@ -118,6 +118,7 @@ def get_departures(
     Overnight departures may exceed 24:00 and belong to that service day;
     departure_datetime shows their actual calendar date. This does not search
     other service days or provide live delays. Direction is optional (0 or 1).
+    Dates outside the loaded dataset are rejected with its supported date range.
     An empty departures list means no matching departures in that service day.
     """
     logger.debug(
@@ -143,6 +144,11 @@ def get_departures(
         raise ToolError("Invalid limit. Use a number from 1 to 100.")
 
     schedule = _get_schedule(ctx)
+    try:
+        schedule.validate_date_range(day)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+
     stop = schedule.get_stop(stop_id)
     route = schedule.get_route(route_id)
     if stop is None:

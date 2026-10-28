@@ -94,7 +94,6 @@ def test_departures_filter_direction_before_limit(sample_gtfs):
         ("S3", "R1", "2026-06-15", "05:00", None),
         ("S2", "R2", "2026-06-15", "06:11", None),
         ("S2", "R2", "2026-06-14", "05:00", None),
-        ("S2", "R2", "2026-07-01", "05:00", None),
         ("S2", "R2", "2026-06-15", "05:00", 0),
     ],
 )
@@ -106,6 +105,29 @@ def test_departures_no_matching_service(sample_gtfs, stop, route, day, time, dir
         )["departures"]
         == []
     )
+
+
+@pytest.mark.parametrize("day", ["2026-05-31", "2026-07-01"])
+def test_departures_reject_dates_outside_dataset(sample_gtfs, day):
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
+    with pytest.raises(ToolError, match="Supported date range: 2026-06-01 to 2026-06-30") as exc:
+        get_departures("S1", "R1", day, "05:00", ctx=_ctx_with(schedule))
+    assert day in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "day,departure_datetime",
+    [
+        ("2026-06-01", "2026-06-02T01:30:00"),
+        ("2026-06-30", "2026-07-01T01:30:00"),
+    ],
+)
+def test_departures_accept_feed_boundaries_and_overnight_trips(
+    sample_gtfs, day, departure_datetime
+):
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
+    result = get_departures("S1", "R1", day, "23:00", ctx=_ctx_with(schedule))
+    assert result["departures"][0]["departure_datetime"] == departure_datetime
 
 
 def test_departures_calendar_exceptions_and_inclusive_time(sample_gtfs):
@@ -188,16 +210,18 @@ def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
             found_routes = await client.call_tool("search_routes", {"query": "R1"})
             assert found_routes.data[0]["route_id"] == "R1"
             assert {"get_departures", "get_routes_for_stop"} <= names
-            departures = await client.call_tool(
-                "get_departures",
-                {
-                    "stop_id": "S2",
-                    "route_id": "R2",
-                    "date": "2026-06-15",
-                    "time": "06:10",
-                },
-            )
+            departure_arguments = {
+                "stop_id": "S2",
+                "route_id": "R2",
+                "date": "2026-06-15",
+                "time": "06:10",
+            }
+            departures = await client.call_tool("get_departures", departure_arguments)
             assert departures.data["departures"][0]["departure_time"] == "06:10:00"
+            with pytest.raises(ToolError, match="Supported date range: 2026-06-01 to 2026-06-30"):
+                await client.call_tool(
+                    "get_departures", departure_arguments | {"date": "2026-07-01"}
+                )
             routes = await client.call_tool("get_routes_for_stop", {"stop_id": "S2"})
             assert [r["route_id"] for r in routes.data] == ["R1", "R2"]
 
