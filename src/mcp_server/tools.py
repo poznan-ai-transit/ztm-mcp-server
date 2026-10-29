@@ -4,15 +4,27 @@ from __future__ import annotations
 import re
 from dataclasses import asdict
 from datetime import date as calendar_date
-from typing import Any
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
 from logging_config import logger
+from mcp_server.schemas import DeparturesResponse, Route, RouteSearchResult, StopId, StopMatch
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
+
+
+def _validate_limit(limit: int) -> None:
+    """Apply the same result limit to all tools returning bounded lists."""
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise ToolError("Invalid limit. Use an integer from 1 to 100.")
+
+
+def _validate_search(query: str, limit: int) -> None:
+    if not query.strip():
+        raise ToolError("Invalid query. Provide a non-empty stop or route name/number.")
+    _validate_limit(limit)
 
 
 def _get_schedule(ctx: Context) -> ZTMStaticSchedule:
@@ -32,13 +44,18 @@ def echo(text: str) -> str:
 
 
 @mcp_tools.tool()
-def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str, Any]]:
+def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[StopMatch]:
     """
     Search transit stops by name.
 
     Before calling, obtain a stop name from the conversation. If missing, ask
     which stop and wait for the answer. Do not guess a name or use an empty query.
     If matches are ambiguous, ask the user before selecting a stop_id.
+    Pass the selected result's stop_id unchanged as a JSON string to
+    get_routes_for_stop or get_departures, preserving leading zeros.
+    Use stop_id, not stop_name, stop_code, or stop_sequence.
+    Blank queries are rejected. Limit must be an integer from 1 to 100.
+    No matching stops returns an empty list, not an error.
 
     Examples:
     - Poznań Główny
@@ -46,6 +63,7 @@ def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str,
     - os. Sobieskiego
     """
     logger.debug("search_stops: query=%r limit=%d", query, limit)
+    _validate_search(query, limit)
     schedule: ZTMStaticSchedule = _get_schedule(ctx)
     matched_stops = [
         {**asdict(match.stop), "score": match.score}
@@ -56,34 +74,39 @@ def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str,
 
 
 @mcp_tools.tool()
-def search_routes(query: str, limit: int = 10, *, ctx: Context) -> list[dict[str, Any]]:
+def search_routes(query: str, limit: int = 10, *, ctx: Context) -> list[RouteSearchResult]:
     """
     Search routes by number or name.
 
     Before calling, obtain a line number or route name from the conversation.
     If missing, ask which line and wait for the answer. Do not guess or use an
     empty query. If matches are ambiguous, ask before selecting a route_id.
+    Blank queries are rejected. Limit must be an integer from 1 to 100.
+    No matching routes returns an empty list, not an error.
 
     Examples:
     - 904
     - 221
     - SYPNIEWO - GARBARY PKM
     """
-    schedule: ZTMStaticSchedule = _get_schedule(ctx)
     logger.debug("search_routes: query=%r limit=%d", query, limit)
+    _validate_search(query, limit)
+    schedule: ZTMStaticSchedule = _get_schedule(ctx)
     routes = schedule.search_routes(query, limit)
     logger.debug("search_routes returned %d routes", len(routes))
     return routes
 
 
 @mcp_tools.tool()
-def get_routes_for_stop(stop_id: str, *, ctx: Context) -> list[dict[str, Any]]:
+def get_routes_for_stop(stop_id: StopId, *, ctx: Context) -> list[Route]:
     """List static mock routes serving a stop. Resolve stop_id with search_stops first.
 
     This lists routes in the dataset, regardless of their operating date.
     If the stop is missing from the conversation, ask which stop and wait for
     the answer. Reuse a previously resolved stop_id when applicable; never
     invent one. This lookup does not require a line, date, or time.
+    Pass stop_id unchanged as a JSON string, preserving leading zeros;
+    do not substitute a stop name, stop_code, or stop_sequence.
     """
     logger.debug("get_routes_for_stop: stop_id=%r", stop_id)
     schedule = _get_schedule(ctx)
@@ -96,7 +119,7 @@ def get_routes_for_stop(stop_id: str, *, ctx: Context) -> list[dict[str, Any]]:
 
 @mcp_tools.tool()
 def get_departures(
-    stop_id: str,
+    stop_id: StopId,
     route_id: str,
     date: str,
     time: str,
@@ -104,7 +127,7 @@ def get_departures(
     limit: int = 5,
     *,
     ctx: Context,
-) -> dict[str, Any]:
+) -> DeparturesResponse:
     """Return scheduled departures for a line and stop from static mock GTFS.
 
     Before calling, obtain the stop, line, service date, and time from the
@@ -113,11 +136,16 @@ def get_departures(
     guess them. Clarify ambiguous search matches before selecting IDs.
     Direction and limit are optional and do not require clarification.
 
-    Resolve IDs using search_stops and search_routes. Date is the GTFS service
+    Resolve IDs using search_stops and search_routes. Pass stop_id unchanged
+    as a JSON string, preserving leading zeros; do not substitute a stop name,
+    stop_code, or stop_sequence. Date is the GTFS service
     day (YYYY-MM-DD), and time is HH:MM (00:00 through 23:59), inclusive.
     Overnight departures may exceed 24:00 and belong to that service day;
     departure_datetime shows their actual calendar date. This does not search
-    other service days or provide live delays. Direction is optional (0 or 1).
+    previous or subsequent service days. Times use Europe/Warsaw local time;
+    departure_datetime has no UTC offset and must not be interpreted as UTC.
+    Limit must be an integer from 1 to 100. No live delays are provided.
+    Direction is optional (0 or 1).
     Dates outside the loaded dataset are rejected with its supported date range.
     An empty departures list means no matching departures in that service day.
     """
@@ -140,8 +168,7 @@ def get_departures(
         raise ToolError("Invalid time. Use HH:MM from 00:00 through 23:59.")
     if direction_id is not None and direction_id not in (0, 1):
         raise ToolError("Invalid direction_id. Use 0 or 1, or omit it.")
-    if not 1 <= limit <= 100:
-        raise ToolError("Invalid limit. Use a number from 1 to 100.")
+    _validate_limit(limit)
 
     schedule = _get_schedule(ctx)
     try:
