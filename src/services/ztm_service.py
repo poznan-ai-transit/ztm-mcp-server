@@ -89,7 +89,7 @@ class ZTMService:
 
     def get_static_gtfs(self) -> dict[str, Any]:
         logger.debug("Reading bundled GTFS archive")
-        with self._mock_gtfs_zip() as zf:
+        with self._fetch_static_gtfs_zip(ini.gtfs_endpoint) as zf:
             stops: list[dict[str, str]] = self._read_csv_from_zip(zf, "stops.txt")
             routes: list[dict[str, str]] = self._read_csv_from_zip(zf, "routes.txt")
             stop_times: list[dict[str, str]] = self._read_csv_from_zip(zf, "stop_times.txt")
