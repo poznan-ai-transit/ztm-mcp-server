@@ -1,6 +1,6 @@
 ﻿# MCP tool contract
 
-The tools in `src/mcp_server/tools.py` serve static timetables from bundled mock
+The tools in `src/mcp_server/tools.py` serve static timetables
 GTFS data. They provide no live delays, predictions, or vehicle status.
 Response types are defined in `src/mcp_server/schemas.py`; results below exclude
 MCP transport wrappers. The server supplies `ctx`; never include it in arguments.
@@ -103,7 +103,6 @@ Returns an object with:
 | `route_id`, `route_short_name` | string | Selected route ID and displayed line. |
 | `date`, `time` | string | Requested service date and time. |
 | `direction_id` | integer or null | Requested direction filter. |
-| `data_source` | string | Always `"static_mock"`. |
 | `realtime` | boolean | Always `false`. |
 | `departures` | array | Matches ordered by scheduled departure time. |
 

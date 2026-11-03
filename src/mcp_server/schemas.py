@@ -87,7 +87,7 @@ class ScheduledDeparture(TypedDict):
 
 
 class DeparturesResponse(TypedDict):
-    """Scheduled departures and the query context from static mock GTFS."""
+    """Scheduled departures and the query context"""
 
     stop_id: StopId
     stop_name: str

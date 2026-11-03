@@ -99,7 +99,7 @@ def search_routes(query: str, limit: int = 10, *, ctx: Context) -> list[RouteSea
 
 @mcp_tools.tool()
 def get_routes_for_stop(stop_id: StopId, *, ctx: Context) -> list[Route]:
-    """List static mock routes serving a stop. Resolve stop_id with search_stops first.
+    """List static routes serving a stop. Resolve stop_id with search_stops first.
 
     This lists routes in the dataset, regardless of their operating date.
     If the stop is missing from the conversation, ask which stop and wait for
@@ -128,7 +128,7 @@ def get_departures(
     *,
     ctx: Context,
 ) -> DeparturesResponse:
-    """Return scheduled departures for a line and stop from static mock GTFS.
+    """Return scheduled departures for a line and stop from static GTFS.
 
     Before calling, obtain the stop, line, service date, and time from the
     conversation. Ask one concise question for missing details and wait for
@@ -200,7 +200,6 @@ def get_departures(
         "date": date,
         "time": time,
         "direction_id": direction_id,
-        "data_source": "static_mock",
         "realtime": False,
         "departures": departures,
     }

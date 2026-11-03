@@ -89,7 +89,6 @@ def test_departures_filter_line_before_limit(sample_gtfs):
     )
     assert result["stop_name"] == "Żabinko"
     assert result["route_short_name"] == "2"
-    assert result["data_source"] == "static_mock"
     assert result["realtime"] is False
     assert [d["departure_time"] for d in result["departures"]] == ["06:10:00"]
     assert result["departures"][0]["trip_headsign"] == "Dworzec"
