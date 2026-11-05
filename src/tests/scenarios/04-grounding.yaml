@@ -1,0 +1,23 @@
+- description: D1 Pytanie o istnienie jest weryfikowane narzedziem
+  vars:
+    question: 'Czy istnieje przystanek Rondo Rataje?'
+  assert:
+    - type: contains
+      metric: grounding
+      value: 'search_stops'
+
+- description: D2 Wymyslony przystanek nadal jest sprawdzany w narzedziu
+  vars:
+    question: 'Check if a stop called "Zzxqv Nonexistent Street" exists.'
+  assert:
+    - type: contains
+      metric: grounding
+      value: 'search_stops'
+
+- description: D3 Pytanie o godziny odjazdow jest weryfikowane narzedziem
+  vars:
+    question: 'What are the next scheduled departures from Rondo Kaponiera starting now?'
+  assert:
+    - type: contains
+      metric: grounding
+      value: 'get_departures'
