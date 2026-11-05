@@ -1,0 +1,105 @@
+- description: A1 EN stop -> search_stops
+  vars:
+    question: 'Check if a stop called "Rondo Kaponiera" exists.'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_stops'
+
+- description: A2 EN route -> search_routes
+  vars:
+    question: 'Check if a route with a number 24 exists.'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_routes'
+
+- description: A3 PL stop -> search_stops, nie search_routes
+  vars:
+    question: 'Czy istnieje przystanek Rondo Kaponiera?'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_stops'
+    - type: not-contains
+      metric: tool_selection
+      value: 'search_routes'
+
+- description: A4 PL linia -> search_routes, nie search_stops
+  vars:
+    question: 'Czy istnieje linia numer 74?'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_routes'
+    - type: not-contains
+      metric: tool_selection
+      value: 'search_stops'
+
+- description: A5 Literowka w nazwie przystanku nadal wywoluje search_stops
+  vars:
+    question: 'Sprawdź przystanek "Kaponera".'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_stops'
+
+- description: A6 Nazwa przystanku trafia do parametrow
+  vars:
+    question: 'Czy istnieje przystanek Rataje?'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_stops'
+    - type: icontains
+      metric: tool_params
+      value: 'Rataje'
+
+- description: A7 Numer linii trafia do parametrow
+  vars:
+    question: 'Czy istnieje linia numer 74?'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_routes'
+    - type: contains
+      metric: tool_params
+      value: '74'
+
+- description: A8 Nazwa wieloczlonowa trafia do parametrow
+  vars:
+    question: 'Check if a stop called "Rondo Kaponiera" exists.'
+  assert:
+    - type: icontains
+      metric: tool_params
+      value: 'Kaponiera'
+
+- description: A9 Pytanie wieloetapowe wywoluje oba narzedzia
+  vars:
+    question: 'Check whether a stop called "Rondo Kaponiera" exists and whether route 24 exists.'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_stops'
+    - type: contains
+      metric: tool_selection
+      value: 'search_routes'
+
+- description: A10 Jawnie podany Poznan nie blokuje zapytania
+  vars:
+    question: 'Check if a stop called "Dworzec Zachodni" exists in Poznań.'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_stops'
+
+- description: A11 Pytanie o najbliższe odjazdy wywoluje get_departures
+  vars:
+    question: 'Show me the next scheduled departures from the Poznań stop Rondo Kaponiera, starting now.'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'get_departures'
+    - type: icontains
+      metric: tool_params
+      value: 'Rondo Kaponiera'
