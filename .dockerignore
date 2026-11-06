@@ -1,0 +1,8 @@
+**
+!requirements.txt
+!src/
+!src/**
+src/mock_data/
+src/tests/
+**/__pycache__/
+**/*.pyc
