@@ -33,6 +33,22 @@ npx @modelcontextprotocol/inspector
 
 Stateless HTTP is enabled to avoid missing session ID errors.
 
+## Docker
+
+```bash
+docker compose up --build -d  # start
+docker compose down          # stop
+docker compose logs mcp      # HTTP logs
+docker compose exec mcp tail -n 50 /app/_logs_/server.log
+```
+
+External access (`.env`):
+
+```dotenv
+BIND_ADDRESS=0.0.0.0
+PORT=8000
+```
+
 ## Demo running
 
 ```bash
