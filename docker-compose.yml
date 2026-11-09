@@ -1,0 +1,13 @@
+services:
+  mcp:
+    build: .
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-8000}:8000"
+    environment:
+      TZ: Europe/Warsaw
+    volumes:
+      - logs:/app/_logs_
+    restart: unless-stopped
+
+volumes:
+  logs:
