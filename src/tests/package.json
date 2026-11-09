@@ -4,7 +4,9 @@
   "description": "stworzyć .env w tym folderze i dodać do niego klucz: OPENROUTER_API_KEY=klucz",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "eval": "promptfoo eval --no-cache -o results.json",
+    "eval:repeat": "promptfoo eval --no-cache --repeat 5 -o results.json",
+    "report": "node failures.js results.json"
   },
   "keywords": [],
   "author": "",
