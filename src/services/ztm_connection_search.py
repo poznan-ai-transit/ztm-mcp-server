@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 from typing import TYPE_CHECKING
-from time import perf_counter
 
 from services.ztm_static_schedule import PrecomputedData, ZTMStaticSchedule
 
 if TYPE_CHECKING:
-    from services.ztm_static_schedule import Route, Stop, StopTime, Trip
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,30 +148,15 @@ class ZTMConnectionSearchService:
             seconds=self._search_horizon_seconds
         )
 
-        started = perf_counter()
-
         scheduled = self._build_connections(
             data=data,
             departure_time=request.departure_time,
             horizon_end=horizon_end,
         )
 
-        built_at = perf_counter()
-        print(
-            f"Built {len(scheduled)} connections in {built_at - started:.3f}s")
-        
         if not scheduled:
             return []
 
-        scan_started = perf_counter()
-
-        scanned_connections = 0
-        connections_with_labels = 0
-        labels_checked = 0
-        candidates_created = 0
-        max_labels_at_stop = 0
-
-        
         # Round-based CSA:
         # round 0 = no transfers
         # round 1 = at most one transfer
@@ -189,10 +173,6 @@ class ZTMConnectionSearchService:
         }
 
         destination_labels: list[_Label] = []
-
-        scan_started = perf_counter()
-        total_scanned = 0
-        total_boardings = 0
 
         for transfer_round in range(request.max_transfers + 1):
             current_round: dict[str, _Label] = {}
@@ -242,10 +222,6 @@ class ZTMConnectionSearchService:
                     if connection.departure_time < earliest_boarding:
                         continue
 
-                    total_boardings += 1
-
-                total_scanned += 1
-
                 if connection.arrival_time > horizon_end:
                     continue
 
@@ -286,8 +262,6 @@ class ZTMConnectionSearchService:
 
             previous_round = current_round
 
-        scan_finished = perf_counter()
-
         journeys: list[Connection] = []
 
         for label in destination_labels:
@@ -310,20 +284,6 @@ class ZTMConnectionSearchService:
                 item.departure_time,
             )
         )
-
-        finished_at = perf_counter()
-
-        print(
-            f"Round-based CSA: {scan_finished - scan_started:.3f}s"
-        )
-        print(f"Connections processed: {total_scanned:,}")
-        print(f"New trip boardings: {total_boardings:,}")
-        print(f"Rounds: {transfer_round + 1}")
-        print(
-            f"Reconstruction and filtering: "
-            f"{finished_at - scan_finished:.3f}s"
-        )
-        print(f"Total search: {finished_at - started:.3f}s")
 
         return journeys[:request.limit]
 

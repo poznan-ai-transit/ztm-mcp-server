@@ -12,13 +12,11 @@ from fastmcp.exceptions import ToolError
 
 from logging_config import logger
 from mcp_server.schemas import DeparturesResponse, Route, RouteSearchResult, StopId, StopMatch
-from services.ztm_static_schedule import ZTMStaticSchedule
-
-
 from services.ztm_connection_search import (
-    ZTMConnectionSearchService,
     ConnectionSearchRequest,
+    ZTMConnectionSearchService,
 )
+from services.ztm_static_schedule import ZTMStaticSchedule
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 
@@ -313,7 +311,6 @@ def search_connection(
         len(connections),
     )
 
-    # Return structured data to the MCP client instead of printing it.
     def serialize(value: Any) -> Any:
         if isinstance(value, (datetime, calendar_date)):
             return value.isoformat()
