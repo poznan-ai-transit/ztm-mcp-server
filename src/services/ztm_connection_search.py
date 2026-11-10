@@ -356,7 +356,7 @@ class ZTMConnectionSearchService:
                     if trip is None or trip.service_id not in active_services:
                         continue
 
-                    for current, following in zip(stop_times, stop_times[1:]):
+                    for current, following in zip(stop_times, stop_times[1:], strict=False):
                         departure = midnight + timedelta(
                             seconds=current.departure_secs
                         )
