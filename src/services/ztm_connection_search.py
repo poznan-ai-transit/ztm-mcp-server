@@ -144,9 +144,7 @@ class ZTMConnectionSearchService:
         if destination is None:
             raise ValueError(f"Unknown destination stop_id: {request.to_stop_id}")
 
-        horizon_end = request.departure_time + timedelta(
-            seconds=self._search_horizon_seconds
-        )
+        horizon_end = request.departure_time + timedelta(seconds=self._search_horizon_seconds)
 
         scheduled = self._build_connections(
             data=data,
@@ -198,9 +196,7 @@ class ZTMConnectionSearchService:
 
                 else:
                     # Board a new trip using a label from the previous round.
-                    previous_label = previous_round.get(
-                        connection.departure_stop_id
-                    )
+                    previous_label = previous_round.get(connection.departure_stop_id)
 
                     if previous_label is None:
                         continue
@@ -214,9 +210,8 @@ class ZTMConnectionSearchService:
                         else 0
                     )
 
-                    earliest_boarding = (
-                        previous_label.arrival_time
-                        + timedelta(seconds=transfer_seconds)
+                    earliest_boarding = previous_label.arrival_time + timedelta(
+                        seconds=transfer_seconds
                     )
 
                     if connection.departure_time < earliest_boarding:
@@ -246,10 +241,7 @@ class ZTMConnectionSearchService:
 
                 # For the same transfer round, an earlier arrival
                 # dominates a later arrival at the same stop.
-                if (
-                    existing is None
-                    or candidate.arrival_time < existing.arrival_time
-                ):
+                if existing is None or candidate.arrival_time < existing.arrival_time:
                     current_round[candidate.stop_id] = candidate
 
             destination_label = current_round.get(request.to_stop_id)
@@ -285,8 +277,7 @@ class ZTMConnectionSearchService:
             )
         )
 
-        return journeys[:request.limit]
-
+        return journeys[: request.limit]
 
     def find_next_connections(
         self,
@@ -357,12 +348,8 @@ class ZTMConnectionSearchService:
                         continue
 
                     for current, following in zip(stop_times, stop_times[1:], strict=False):
-                        departure = midnight + timedelta(
-                            seconds=current.departure_secs
-                        )
-                        arrival = midnight + timedelta(
-                            seconds=following.arrival_secs
-                        )
+                        departure = midnight + timedelta(seconds=current.departure_secs)
+                        arrival = midnight + timedelta(seconds=following.arrival_secs)
 
                         if departure < departure_time or departure > horizon_end:
                             continue
@@ -482,9 +469,7 @@ class ZTMConnectionSearchService:
                 ConnectionLeg(
                     trip_id=first.trip_id,
                     route_id=first.route_id,
-                    route_short_name=(
-                        route.route_short_name if route else first.route_id
-                    ),
+                    route_short_name=(route.route_short_name if route else first.route_id),
                     trip_headsign=trip.trip_headsign,
                     from_stop_id=first.departure_stop_id,
                     from_stop_name=from_stop.stop_name,

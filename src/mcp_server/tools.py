@@ -260,9 +260,7 @@ def search_connection(
     try:
         day = calendar_date.fromisoformat(date)
     except ValueError as exc:
-        raise ToolError(
-            "Invalid date. Provide a valid calendar date as YYYY-MM-DD."
-        ) from exc
+        raise ToolError("Invalid date. Provide a valid calendar date as YYYY-MM-DD.") from exc
 
     # Validate time.
     if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time):
@@ -280,14 +278,10 @@ def search_connection(
 
     # Validate stop IDs before searching.
     if schedule.get_stop(from_stop_id) is None:
-        raise ToolError(
-            "Unknown origin stop_id. Use search_stops to find a valid stop."
-        )
+        raise ToolError("Unknown origin stop_id. Use search_stops to find a valid stop.")
 
     if schedule.get_stop(to_stop_id) is None:
-        raise ToolError(
-            "Unknown destination stop_id. Use search_stops to find a valid stop."
-        )
+        raise ToolError("Unknown destination stop_id. Use search_stops to find a valid stop.")
 
     departure_time = datetime.strptime(
         f"{day.isoformat()} {time}",
