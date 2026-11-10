@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 from datetime import date
 
+import pytest
+
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 
@@ -27,6 +29,51 @@ def test_load_returns_singleton_and_builds_indexes(sample_gtfs):
     assert [route.route_id for route in schedule.get_all_routes()] == ["R1", "R2"]
     assert schedule.feed_info is not None
     assert schedule.feed_info.publisher_name == "ZTM Poznań"
+
+
+def test_available_date_range_uses_feed_metadata_and_updates_on_reload(sample_gtfs):
+    schedule = _loaded(sample_gtfs)
+    assert schedule.available_date_range == (date(2026, 6, 1), date(2026, 6, 30))
+
+    sample_gtfs["feed_info"][0].update(feed_start_date="20260610", feed_end_date="20260620")
+    ZTMStaticSchedule.load(sample_gtfs)
+    assert schedule.available_date_range == (date(2026, 6, 10), date(2026, 6, 20))
+
+
+def test_available_date_range_falls_back_to_calendar_and_added_exceptions(sample_gtfs):
+    sample_gtfs["feed_info"] = []
+    sample_gtfs["calendar_dates"] = [
+        {"service_id": "EXTRA", "date": "20260531", "exception_type": "1"},
+        {"service_id": "EXTRA", "date": "20260703", "exception_type": "1"},
+        {"service_id": "REMOVED", "date": "20260801", "exception_type": "2"},
+    ]
+    schedule = _loaded(sample_gtfs)
+    assert schedule.available_date_range == (date(2026, 5, 31), date(2026, 7, 3))
+
+
+def test_validate_date_range_accepts_inclusive_boundaries(sample_gtfs):
+    schedule = _loaded(sample_gtfs)
+    schedule.validate_date_range(date(2026, 6, 1), date(2026, 6, 30))
+
+
+@pytest.mark.parametrize(
+    "start,end",
+    [
+        (date(2026, 5, 31), date(2026, 6, 1)),
+        (date(2026, 6, 30), date(2026, 7, 1)),
+        (date(2026, 6, 15), date(2026, 6, 14)),
+    ],
+)
+def test_validate_date_range_rejects_outside_or_reversed_ranges(sample_gtfs, start, end):
+    schedule = _loaded(sample_gtfs)
+    with pytest.raises(ValueError, match="Supported date range: 2026-06-01 to 2026-06-30"):
+        schedule.validate_date_range(start, end)
+
+
+def test_validate_date_range_rejects_unavailable_schedule():
+    schedule = ZTMStaticSchedule.instance()
+    with pytest.raises(ValueError, match="no available date range"):
+        schedule.validate_date_range(date(2026, 6, 15))
 
 
 def test_load_keeps_singleton_identity_while_replacing_data(sample_gtfs):

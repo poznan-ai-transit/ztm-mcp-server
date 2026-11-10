@@ -33,6 +33,22 @@ npx @modelcontextprotocol/inspector
 
 Stateless HTTP is enabled to avoid missing session ID errors.
 
+## Docker
+
+```bash
+docker compose up --build -d  # start
+docker compose down          # stop
+docker compose logs mcp      # HTTP logs
+docker compose exec mcp tail -n 50 /app/_logs_/server.log
+```
+
+External access (`.env`):
+
+```dotenv
+BIND_ADDRESS=0.0.0.0
+PORT=8000
+```
+
 ## Demo running
 
 ```bash
@@ -109,3 +125,4 @@ entirely against the bundled mock data — no network access required.
 | [docs/01-product-goal.md](docs/01-product-goal.md) | Project description and product goal |
 | [docs/02-mvp.md](docs/02-mvp.md) | MVP boundaries, mock phase, and core behavior |
 | [docs/03-requirements.md](docs/03-requirements.md) | Functional and non-functional requirements for the MVP |
+| [docs/04-mcp-tool-contract.md](docs/04-mcp-tool-contract.md) | Tool inputs, outputs, JSON examples, identifier resolution, and errors |
