@@ -207,3 +207,16 @@ def sample_gtfs() -> dict:
         ],
         "calendar_dates": [],
     }
+
+@pytest.fixture
+def sample_schedule(sample_gtfs):
+    return ZTMStaticSchedule.load(sample_gtfs)
+
+
+@pytest.fixture
+def search_service(sample_schedule):
+    from services.ztm_connection_search import (
+        ZTMConnectionSearchService,
+    )
+
+    return ZTMConnectionSearchService(schedule=sample_schedule)
