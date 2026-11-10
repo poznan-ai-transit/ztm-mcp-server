@@ -4,12 +4,18 @@ from __future__ import annotations
 import re
 from dataclasses import asdict
 from datetime import date as calendar_date
+from datetime import datetime
+from typing import Any
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
 from logging_config import logger
 from mcp_server.schemas import DeparturesResponse, Route, RouteSearchResult, StopId, StopMatch
+from services.ztm_connection_search import (
+    ConnectionSearchRequest,
+    ZTMConnectionSearchService,
+)
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
@@ -203,3 +209,109 @@ def get_departures(
         "realtime": False,
         "departures": departures,
     }
+
+
+@mcp_tools.tool()
+def search_connection(
+    from_stop_id: str,
+    to_stop_id: str,
+    date: str,
+    time: str,
+    max_transfers: int = 2,
+    limit: int = 5,
+    *,
+    ctx: Context,
+) -> list[dict[str, Any]]:
+    """
+    Search for complete public transport journeys between two stops.
+
+    Before calling, obtain both stop IDs, the service date, and departure
+    time from the conversation. Ask one concise question for missing details.
+    Reuse previously resolved stop IDs; never invent them. Resolve stop IDs
+    using search_stops and clarify ambiguous matches.
+
+    Date is the GTFS service day (YYYY-MM-DD).
+    Time is HH:MM (00:00 through 23:59), inclusive.
+
+    max_transfers is the maximum number of changes between vehicles.
+    limit is the maximum number of journeys to return.
+
+    A connection represents a complete journey. Each leg represents one
+    continuous ride on a scheduled GTFS trip.
+
+    This searches static GTFS data only. It does not include live delays
+    or walking transfers. An empty list means no matching journeys were found.
+    """
+    logger.debug(
+        "search_connection: from_stop_id=%r to_stop_id=%r "
+        "date=%r time=%r max_transfers=%d limit=%d",
+        from_stop_id,
+        to_stop_id,
+        date,
+        time,
+        max_transfers,
+        limit,
+    )
+
+    # Validate date.
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise ToolError("Invalid date. Use YYYY-MM-DD.")
+
+    try:
+        day = calendar_date.fromisoformat(date)
+    except ValueError as exc:
+        raise ToolError("Invalid date. Provide a valid calendar date as YYYY-MM-DD.") from exc
+
+    # Validate time.
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time):
+        raise ToolError("Invalid time. Use HH:MM from 00:00 through 23:59.")
+
+    # Validate search parameters.
+    if not 0 <= max_transfers <= 10:
+        raise ToolError("Invalid max_transfers. Use a number from 0 to 10.")
+
+    if not 1 <= limit <= 100:
+        raise ToolError("Invalid limit. Use a number from 1 to 100.")
+
+    # Use the schedule initialized by the MCP server lifespan.
+    schedule = _get_schedule(ctx)
+
+    # Validate stop IDs before searching.
+    if schedule.get_stop(from_stop_id) is None:
+        raise ToolError("Unknown origin stop_id. Use search_stops to find a valid stop.")
+
+    if schedule.get_stop(to_stop_id) is None:
+        raise ToolError("Unknown destination stop_id. Use search_stops to find a valid stop.")
+
+    departure_time = datetime.strptime(
+        f"{day.isoformat()} {time}",
+        "%Y-%m-%d %H:%M",
+    )
+
+    service = ZTMConnectionSearchService(schedule=schedule)
+
+    connections = service.search_connections(
+        ConnectionSearchRequest(
+            from_stop_id=from_stop_id,
+            to_stop_id=to_stop_id,
+            departure_time=departure_time,
+            max_transfers=max_transfers,
+            limit=limit,
+        )
+    )
+
+    logger.debug(
+        "search_connection returned %d connections",
+        len(connections),
+    )
+
+    def serialize(value: Any) -> Any:
+        if isinstance(value, (datetime, calendar_date)):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {key: serialize(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [serialize(item) for item in value]
+        return value
+
+    return [serialize(asdict(connection)) for connection in connections]
