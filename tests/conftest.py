@@ -208,6 +208,7 @@ def sample_gtfs() -> dict:
         "calendar_dates": [],
     }
 
+
 @pytest.fixture
 def sample_schedule(sample_gtfs):
     return ZTMStaticSchedule.load(sample_gtfs)
