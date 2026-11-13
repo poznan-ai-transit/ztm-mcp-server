@@ -98,7 +98,9 @@ async def run_agent(messages, trace_container):
         streamablehttp_client(MCP_URL) as (read, write, _),
         ClientSession(read, write) as session,
     ):
-        await session.initialize()
+        initialization = await session.initialize()
+        if initialization.instructions:
+            messages.insert(1, {"role": "system", "content": initialization.instructions})
         discovered = await session.list_tools()
 
         # Convert actual MCP definitions into OpenAI-compatible tools.

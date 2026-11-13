@@ -50,8 +50,9 @@ def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[StopMatch
 
     Before calling, obtain a stop name from the conversation. If missing, ask
     which stop and wait for the answer. Do not guess a name or use an empty query.
-    If matches are ambiguous, ask the user before selecting a stop_id.
-    Pass the selected result's stop_id unchanged as a JSON string to
+    Prefer exact name matches; keep different-name alternatives separate.
+    Same-name results are platforms, not ambiguity. Clarify different places by name.
+    Pass each applicable result's stop_id unchanged as a JSON string to
     get_routes_for_stop or get_departures, preserving leading zeros.
     Use stop_id, not stop_name, stop_code, or stop_sequence.
     Blank queries are rejected. Limit must be an integer from 1 to 100.
@@ -105,6 +106,7 @@ def get_routes_for_stop(stop_id: StopId, *, ctx: Context) -> list[Route]:
     If the stop is missing from the conversation, ask which stop and wait for
     the answer. Reuse a previously resolved stop_id when applicable; never
     invent one. This lookup does not require a line, date, or time.
+    For line lists, query every returned same-name platform and deduplicate routes.
     Pass stop_id unchanged as a JSON string, preserving leading zeros;
     do not substitute a stop name, stop_code, or stop_sequence.
     """
@@ -133,7 +135,7 @@ def get_departures(
     Before calling, obtain the stop, line, service date, and time from the
     conversation. Ask one concise question for missing details and wait for
     the answer. Reuse provided details and previously resolved IDs; never
-    guess them. Clarify ambiguous search matches before selecting IDs.
+    guess them. Check applicable same-name platforms and merge departures without duplicates.
     Direction and limit are optional and do not require clarification.
 
     Resolve IDs using search_stops and search_routes. Pass stop_id unchanged

@@ -25,6 +25,8 @@ Tool usage:
   claim that a stop or route exists when the tools do not confirm it.
 - When there are multiple stops with the same name, always consider
   routes from all of them.
+- Ask only for missing required information, never for a choice of stop IDs
+  or codes. Clarify genuinely different places by name.
 
 Limitations:
 - This server does not provide live departure information.
