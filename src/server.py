@@ -15,7 +15,8 @@ This MCP server provides information about public transport in Poznań,
 Poland, operated by ZTM Poznań.
 
 Tool usage:
-- Use search_stops to verify stop names and find matching stops.
+- Search supplied stop names or places with search_stops before asking for a more
+  exact name. Do not require official stop names or platform numbers.
 - Use search_routes to verify route numbers and find matching routes.
 - Use the appropriate tool when answering factual questions about stops
   or routes. Do not rely on model memory for this information.

@@ -48,7 +48,7 @@ def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[StopMatch
     """
     Search transit stops by name.
 
-    Before calling, obtain a stop name from the conversation. If missing, ask
+    Before calling, obtain a stop name or place from the conversation. If missing, ask
     which stop and wait for the answer. Do not guess a name or use an empty query.
     Prefer exact name matches; keep different-name alternatives separate.
     Same-name results are platforms, not ambiguity. Clarify different places by name.
