@@ -18,7 +18,8 @@ MCP transport wrappers. The server supplies `ctx`; never include it in arguments
 ## Shared rules
 
 - Obtain required details from the conversation. Ask one concise question for
-  missing details and wait; clarify ambiguous search matches before selecting IDs.
+  missing details and wait; clarify genuinely different places by name, never IDs or codes.
+- For line lists, query every returned same-name platform and deduplicate routes.
 - Resolve `stop_id` with `search_stops` and `route_id` with `search_routes`.
   Reuse resolved IDs when applicable; never invent them.
 - Pass IDs unchanged as JSON strings, preserving leading zeros. A `stop_id` is
