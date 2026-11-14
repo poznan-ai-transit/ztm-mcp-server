@@ -1,11 +1,9 @@
-// Uzycie: node failures.js results.json
-// Wypisuje podsumowanie per model/kategoria oraz oblane testy.
+// Usage: node failures.js results.json
 const fs = require('fs');
 
 const file = process.argv[2] || 'results.json';
 const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-// Rozne wersje promptfoo trzymaja wyniki w .results.results albo .results
 const rows = Array.isArray(data.results) ? data.results : (data.results && data.results.results) || [];
 
 const text = (v) => (typeof v === 'string' ? v : JSON.stringify(v)) || '';
@@ -34,9 +32,9 @@ for (const row of rows) {
   summary.set(key, entry);
 }
 
-console.log('PODSUMOWANIE');
+console.log('SUMMARY');
 console.log('============');
-console.log('Model                                      Kategoria  Wynik');
+console.log('Model                                      Category  Result');
 for (const entry of summary.values()) {
   const rate = entry.total ? ((entry.passed / entry.total) * 100).toFixed(1) : '0.0';
   console.log(
@@ -45,7 +43,7 @@ for (const entry of summary.values()) {
 }
 const passed = rows.filter((row) => row.success).length;
 const overallRate = rows.length ? ((passed / rows.length) * 100).toFixed(1) : '0.0';
-console.log(`Razem: ${passed}/${rows.length} (${overallRate}%)`);
+console.log(`Overall: ${passed}/${rows.length} (${overallRate}%)`);
 console.log('');
 
 let failed = 0;
@@ -60,4 +58,4 @@ for (const r of rows) {
   console.log('  output: ' + short(r.response && r.response.output, 250));
   console.log('');
 }
-console.log(`Oblane: ${failed} z ${rows.length}`);
+console.log(`Failed: ${failed} out of ${rows.length}`);

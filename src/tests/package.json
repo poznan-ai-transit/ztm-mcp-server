@@ -1,7 +1,7 @@
 {
   "name": "tests",
   "version": "1.0.0",
-  "description": "stworzyć .env w tym folderze i dodać do niego klucz: OPENROUTER_API_KEY=klucz",
+  "description": "Create a .env file in this folder and add your API key: OPENROUTER_API_KEY=key",
   "main": "index.js",
   "scripts": {
     "eval": "promptfoo eval --no-cache -o results.json",

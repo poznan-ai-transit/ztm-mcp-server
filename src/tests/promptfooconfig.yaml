@@ -1,11 +1,8 @@
-# Testy agenta ZTM Poznan.
-#
-# Uruchomienie (z src/tests):
+# Running (from src/tests):
 #   npx promptfoo eval --no-cache -o results.json
 #   npx promptfoo eval --no-cache --repeat 5 -o results.json
 #   node failures.js results.json
 #
-# Scenariusze sa podzielone wedlug kategorii w katalogu scenarios/.
 
 providers:
   - id: openrouter:anthropic/claude-haiku-5.5

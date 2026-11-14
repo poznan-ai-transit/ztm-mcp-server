@@ -14,7 +14,7 @@
       metric: tool_selection
       value: 'search_routes'
 
-- description: A3 PL stop -> search_stops, nie search_routes
+- description: A3 PL stop -> search_stops, not search_routes
   vars:
     question: 'Czy istnieje przystanek Rondo Kaponiera?'
   assert:
@@ -25,7 +25,7 @@
       metric: tool_selection
       value: 'search_routes'
 
-- description: A4 PL linia -> search_routes, nie search_stops
+- description: A4 PL route -> search_routes, not search_stops
   vars:
     question: 'Czy istnieje linia numer 74?'
   assert:
@@ -36,7 +36,7 @@
       metric: tool_selection
       value: 'search_stops'
 
-- description: A5 Literowka w nazwie przystanku nadal wywoluje search_stops
+- description: A5 A typo in the stop name still calls search_stops
   vars:
     question: 'Sprawdź przystanek "Kaponera".'
   assert:
@@ -44,7 +44,7 @@
       metric: tool_selection
       value: 'search_stops'
 
-- description: A6 Nazwa przystanku trafia do parametrow
+- description: A6 Stop name is passed as a parameter
   vars:
     question: 'Czy istnieje przystanek Rataje?'
   assert:
@@ -55,7 +55,7 @@
       metric: tool_params
       value: 'Rataje'
 
-- description: A7 Numer linii trafia do parametrow
+- description: A7 Route number is passed as a parameter
   vars:
     question: 'Czy istnieje linia numer 74?'
   assert:
@@ -66,7 +66,7 @@
       metric: tool_params
       value: '74'
 
-- description: A8 Nazwa wieloczlonowa trafia do parametrow
+- description: A8 Multi-word name is passed as a parameter
   vars:
     question: 'Check if a stop called "Rondo Kaponiera" exists.'
   assert:
@@ -74,7 +74,7 @@
       metric: tool_params
       value: 'Kaponiera'
 
-- description: A9 Pytanie wieloetapowe wywoluje oba narzedzia
+- description: A9 A multi-step question calls both tools
   vars:
     question: 'Check whether a stop called "Rondo Kaponiera" exists and whether route 24 exists.'
   assert:
@@ -85,7 +85,7 @@
       metric: tool_selection
       value: 'search_routes'
 
-- description: A10 Jawnie podany Poznan nie blokuje zapytania
+- description: A10 Explicitly specifying Poznan does not block the request
   vars:
     question: 'Check if a stop called "Dworzec Zachodni" exists in Poznań.'
   assert:
@@ -93,7 +93,7 @@
       metric: tool_selection
       value: 'search_stops'
 
-- description: A11 Pytanie o najbliższe odjazdy wywoluje get_departures
+- description: A11 A question about upcoming departures calls get_departures
   vars:
     question: 'Show me the next scheduled departures from the Poznań stop Rondo Kaponiera, starting now.'
   assert:

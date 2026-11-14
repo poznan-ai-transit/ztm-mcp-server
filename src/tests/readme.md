@@ -1,24 +1,24 @@
-stworzyć .env w tym folderze i dodać do niego klucz:
-OPENROUTER_API_KEY=klucz
+Create a `.env` file in this directory and add the following key:
+OPENROUTER_API_KEY=your-key
 
-Następnie:
+Then run:
 ```bash
 cd src/tests
 npm install
 npx promptfoo eval --no-cache -o results.json
 ```
 
-Konfiguracja uruchamia te same scenariusze na trzech modelach OpenRouter.
-Scenariusze są podzielone według kategorii w `scenarios/`.
+The configuration runs the same scenarios against three OpenRouter models.
+Scenarios are grouped by category in `scenarios/`.
 
-Do pomiaru stabilności wykonujemy kilka powtórzeń:
+To measure stability, run several repetitions:
 ```bash
 npx promptfoo eval --no-cache --repeat 5 -o results.json
 node failures.js results.json
 ```
 
-Raport tekstowy pokazuje na początku pass rate per model i kategorię, a następnie
-szczegóły niezaliczonych przypadków. Wyniki można również przeglądać w UI:
+The text report first shows the pass rate for each model and category, followed
+by details of failed cases. Results can also be viewed in the UI:
 ```bash
 npx promptfoo view
 ```

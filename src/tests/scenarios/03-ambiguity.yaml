@@ -1,4 +1,4 @@
-- description: C1 Brak nazwy przystanku (EN)
+- description: C1 Missing stop name (EN)
   vars:
     question: 'Check if a stop exists.'
   assert:
@@ -9,7 +9,7 @@
       metric: ambiguity
       value: '?'
 
-- description: C2 Brak numeru linii (EN)
+- description: C2 Missing route number (EN)
   vars:
     question: 'Does my bus line exist?'
   assert:
@@ -20,7 +20,7 @@
       metric: ambiguity
       value: '?'
 
-- description: C3 Brak nazwy przystanku (PL)
+- description: C3 Missing stop name (PL)
   vars:
     question: 'Sprawdź czy przystanek istnieje.'
   assert:
@@ -31,7 +31,7 @@
       metric: ambiguity
       value: 'przystanek'
 
-- description: C4 Pytanie o odjazd bez przystanku
+- description: C4 Departure question without a stop
   vars:
     question: 'Kiedy jest następny tramwaj?'
   assert:
@@ -42,7 +42,7 @@
       metric: ambiguity
       value: 'przystanek'
 
-- description: C5 Komplet danych nie wywoluje zbednego pytania
+- description: C5 Complete details do not trigger an unnecessary question
   vars:
     question: 'Check if route 24 exists in Poznań.'
   assert:
