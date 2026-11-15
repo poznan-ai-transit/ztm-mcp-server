@@ -1,0 +1,23 @@
+- description: D1 Existence question is verified with a tool
+  vars:
+    question: 'Czy istnieje przystanek Rondo Rataje?'
+  assert:
+    - type: contains
+      metric: grounding
+      value: 'search_stops'
+
+- description: D2 A made-up stop is still checked with a tool
+  vars:
+    question: 'Check if a stop called "Zzxqv Nonexistent Street" exists.'
+  assert:
+    - type: contains
+      metric: grounding
+      value: 'search_stops'
+
+- description: D3 Departure-time question is verified with a tool
+  vars:
+    question: 'What are the next scheduled departures from Rondo Kaponiera starting now?'
+  assert:
+    - type: contains
+      metric: grounding
+      value: 'get_departures'

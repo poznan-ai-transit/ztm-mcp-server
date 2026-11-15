@@ -1,0 +1,7 @@
+- description: W0 Warm-up MCP connection
+  vars:
+    question: 'Czy istnieje przystanek Rondo Kaponiera?'
+  assert:
+    - type: contains
+      metric: tool_selection
+      value: 'search_stops'
