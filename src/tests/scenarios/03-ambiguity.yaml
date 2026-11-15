@@ -1,0 +1,51 @@
+- description: C1 Missing stop name (EN)
+  vars:
+    question: 'Check if a stop exists.'
+  assert:
+    - type: not-regex
+      metric: ambiguity
+      value: '"type":"function"|function_calls|invoke name'
+    - type: contains
+      metric: ambiguity
+      value: '?'
+
+- description: C2 Missing route number (EN)
+  vars:
+    question: 'Does my bus line exist?'
+  assert:
+    - type: not-regex
+      metric: ambiguity
+      value: '"type":"function"|function_calls|invoke name'
+    - type: contains
+      metric: ambiguity
+      value: '?'
+
+- description: C3 Missing stop name (PL)
+  vars:
+    question: 'Sprawdź czy przystanek istnieje.'
+  assert:
+    - type: not-regex
+      metric: ambiguity
+      value: '"type":"function"|function_calls|invoke name'
+    - type: icontains
+      metric: ambiguity
+      value: 'przystanek'
+
+- description: C4 Departure question without a stop
+  vars:
+    question: 'Kiedy jest następny tramwaj?'
+  assert:
+    - type: not-regex
+      metric: ambiguity
+      value: '"type":"function"|function_calls|invoke name'
+    - type: icontains
+      metric: ambiguity
+      value: 'przystanek'
+
+- description: C5 Complete details do not trigger an unnecessary question
+  vars:
+    question: 'Check if route 24 exists in Poznań.'
+  assert:
+    - type: contains
+      metric: ambiguity
+      value: 'search_routes'
