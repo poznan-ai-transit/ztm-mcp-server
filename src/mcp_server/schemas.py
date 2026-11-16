@@ -16,7 +16,7 @@ StopId = Annotated[
             "Exact GTFS stop_id returned by search_stops. Pass unchanged as a JSON string, "
             "preserving leading zeros. Do not pass a stop name, stop_code, or stop_sequence. "
             "Reuse a previously resolved ID when applicable; never invent one. "
-            "Resolve ambiguous search matches with the user before selecting an ID."
+            "Clarify only genuinely different places by name."
         ),
     ),
 ]
