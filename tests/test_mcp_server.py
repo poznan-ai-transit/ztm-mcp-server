@@ -15,7 +15,6 @@ from fastmcp.exceptions import ToolError
 
 from mcp_server.resources import list_routes_and_stops
 from mcp_server.tools import (
-    echo,
     get_departures,
     get_routes_for_stop,
     search_routes,
@@ -24,22 +23,6 @@ from mcp_server.tools import (
 from server import create_server
 from services.ztm_service import ZTMService
 from services.ztm_static_schedule import ZTMStaticSchedule
-
-# --------------------------------------------------------------------------- #
-# echo tool
-# --------------------------------------------------------------------------- #
-
-
-def test_echo_returns_input():
-    assert echo("hello") == "hello"
-
-
-def test_echo_preserves_polish_diacritics():
-    assert echo("Świętego Marcina") == "Świętego Marcina"
-
-
-def test_echo_empty_string():
-    assert echo("") == ""
 
 
 def test_search_stops_uses_schedule_wrapper(sample_gtfs):
