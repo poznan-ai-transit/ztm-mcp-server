@@ -42,14 +42,6 @@ def _get_schedule(ctx: Context) -> ZTMStaticSchedule:
 
 
 @mcp_tools.tool()
-def echo(text: str) -> str:
-    """Test tool — returns input."""
-    logger.debug("echo: input_length=%d", len(text))
-    logger.debug("echo returned %d characters", len(text))
-    return text
-
-
-@mcp_tools.tool()
 def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[StopMatch]:
     """
     Search transit stops by name.
