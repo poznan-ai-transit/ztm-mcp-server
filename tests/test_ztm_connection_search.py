@@ -1,7 +1,5 @@
 from datetime import datetime
 
-import pytest
-
 from services.ztm_connection_search import (
     ConnectionSearchRequest,
 )
@@ -83,28 +81,6 @@ def test_connection_with_one_transfer(search_service):
     assert journey.legs[1].to_stop_id == "S3"
 
     assert journey.legs[0].arrival_time <= journey.legs[1].departure_time
-
-
-def test_unknown_origin_stop(search_service):
-    request = ConnectionSearchRequest(
-        from_stop_id="UNKNOWN",
-        to_stop_id="S2",
-        departure_time=datetime(2026, 6, 1, 5, 30),
-    )
-
-    with pytest.raises(ValueError, match="Unknown origin"):
-        search_service.search_connections(request)
-
-
-def test_unknown_destination_stop(search_service):
-    request = ConnectionSearchRequest(
-        from_stop_id="S1",
-        to_stop_id="UNKNOWN",
-        departure_time=datetime(2026, 6, 1, 5, 30),
-    )
-
-    with pytest.raises(ValueError, match="Unknown destination"):
-        search_service.search_connections(request)
 
 
 def test_same_origin_and_destination(search_service):

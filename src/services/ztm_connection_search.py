@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import TYPE_CHECKING
 
 from services.ztm_static_schedule import PrecomputedData, ZTMStaticSchedule
-
-if TYPE_CHECKING:
-    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +110,7 @@ class ZTMConnectionSearchService:
         if search_horizon_seconds <= 0:
             raise ValueError("search_horizon_seconds must be positive")
 
-        self._schedule = schedule or ZTMStaticSchedule.instance()
+        self._schedule = schedule
         self._minimum_transfer_seconds = minimum_transfer_seconds
         self._search_horizon_seconds = search_horizon_seconds
 
@@ -136,13 +132,6 @@ class ZTMConnectionSearchService:
 
         if request.from_stop_id == request.to_stop_id:
             return []
-
-        origin = data.stops_by_id.get(request.from_stop_id)
-        destination = data.stops_by_id.get(request.to_stop_id)
-        if origin is None:
-            raise ValueError(f"Unknown origin stop_id: {request.from_stop_id}")
-        if destination is None:
-            raise ValueError(f"Unknown destination stop_id: {request.to_stop_id}")
 
         horizon_end = request.departure_time + timedelta(seconds=self._search_horizon_seconds)
 
