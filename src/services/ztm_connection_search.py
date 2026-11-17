@@ -84,8 +84,8 @@ class ZTMConnectionSearchService:
     """Search scheduled public-transport connections using GTFS data.
 
     The service does not own or parse GTFS data. It reads one immutable-by-
-    convention ``PrecomputedData`` snapshot from ``ZTMStaticSchedule`` per
-    search, so a concurrent daily feed reload cannot mix old and new indexes.
+    convention ``PrecomputedData`` snapshot from a date-selected
+    ``ZTMStaticSchedule`` per search. It never combines records from other feeds.
 
     The first implementation supports transfers at the same stop_id only.
     ``pickup_type`` / ``drop_off_type`` value 1 is treated as prohibited;
@@ -100,7 +100,7 @@ class ZTMConnectionSearchService:
 
     def __init__(
         self,
-        schedule: ZTMStaticSchedule | None = None,
+        schedule: ZTMStaticSchedule,
         *,
         minimum_transfer_seconds: int = DEFAULT_MINIMUM_TRANSFER_SECONDS,
         search_horizon_seconds: int = DEFAULT_SEARCH_HORIZON_SECONDS,
@@ -126,8 +126,7 @@ class ZTMConnectionSearchService:
         """
         self._validate_request(request)
 
-        # Capture once: ZTMStaticSchedule.load() swaps this reference only
-        # after a complete new PrecomputedData object has been built.
+        # Published schedules are immutable by convention; retain this feed's data.
         data: PrecomputedData = self._schedule.data
 
         if request.from_stop_id == request.to_stop_id:
@@ -319,6 +318,10 @@ class ZTMConnectionSearchService:
         """
         first_day = departure_time.date() - timedelta(days=1)
         last_day = horizon_end.date()
+        bounds = self._schedule.available_date_range
+        if bounds is not None:
+            first_day = max(first_day, bounds[0])
+            last_day = min(last_day, bounds[1])
         connections: list[_ScheduledConnection] = []
 
         service_day = first_day

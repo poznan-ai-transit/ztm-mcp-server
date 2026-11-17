@@ -17,9 +17,8 @@ Design notes
     * _services             - service_id -> Service (weekly pattern + exceptions)
     * _routes_by_stop       - stop_id -> {route_id, ...}
     * _stops_by_route       - route_id -> {direction_id -> [stop_id, ...]} (modal pattern)
-- Everything lives inside a single PrecomputedData object. Reloading the feed
-  means building a brand new PrecomputedData and swapping a module-level
-  reference, so readers never see a half-built state.
+- Each schedule owns a separate PrecomputedData object. Loading a feed creates
+  a new schedule; published schedules are immutable by convention.
 
 On timestamps
 -------------
@@ -45,7 +44,6 @@ timestamp" -- it has to happen with a date in hand, not at parse time.
 
 from __future__ import annotations
 
-import threading
 import unicodedata
 from bisect import bisect_left
 from collections import Counter
@@ -234,25 +232,8 @@ class PrecomputedData:
 
 
 class ZTMStaticSchedule:
-    _instance: ZTMStaticSchedule | None = None
-    _lock = threading.Lock()
-
-    @classmethod
-    def instance(cls) -> ZTMStaticSchedule:
-        return cls()
-
-    def __new__(cls) -> ZTMStaticSchedule:
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
-                cls._instance._initialized = False
-            return cls._instance
-
     def __init__(self) -> None:
-        if getattr(self, "_initialized", False):
-            return
         self.data = PrecomputedData()
-        self._initialized = True
 
     # -- properties for top-level metadata -----------------------------------
 
@@ -296,7 +277,7 @@ class ZTMStaticSchedule:
 
     @classmethod
     def load(cls, rows_by_file: dict[str, list[dict[str, str]]]) -> ZTMStaticSchedule:
-        storage = cls.instance()
+        storage = cls()
         data = PrecomputedData()
 
         data.feed_info = storage._load_feed_info(rows_by_file.get("feed_info", []))
@@ -310,8 +291,7 @@ class ZTMStaticSchedule:
         storage._build_departure_index(data)
         storage._build_route_stop_indexes(data)
 
-        with cls._lock:
-            storage.data = data
+        storage.data = data
         logger.debug("GTFS data loaded into schedule storage")
         return storage
 
