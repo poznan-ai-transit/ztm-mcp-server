@@ -113,6 +113,47 @@ def test_read_csv_from_zip_handles_empty_body(service):
 # --------------------------------------------------------------------------- #
 
 
+def test_start_daily_refresh_loads_before_starting_worker(service, monkeypatch):
+    thread = Mock()
+    refresh = Mock()
+    monkeypatch.setattr(service, "_refresh_schedules", refresh)
+    monkeypatch.setattr("services.ztm_service.threading.Thread", Mock(return_value=thread))
+    thread.start.side_effect = lambda: refresh.assert_called_once_with()
+
+    service.start_daily_refresh()
+
+    refresh.assert_called_once_with()
+    thread.start.assert_called_once_with()
+
+
+def test_start_daily_refresh_initial_failure_does_not_start_worker(service, monkeypatch):
+    monkeypatch.setattr(service, "_refresh_schedules", Mock(side_effect=ValueError("No feeds")))
+    thread_factory = Mock()
+    monkeypatch.setattr("services.ztm_service.threading.Thread", thread_factory)
+
+    with pytest.raises(ValueError, match="No feeds"):
+        service.start_daily_refresh()
+
+    thread_factory.assert_not_called()
+    assert service._thread is None
+
+
+def test_daily_refresh_worker_waits_after_initial_load(service, monkeypatch):
+    refresh = Mock()
+    thread_factory = Mock()
+    monkeypatch.setattr(service, "_refresh_schedules", refresh)
+    monkeypatch.setattr("services.ztm_service.threading.Thread", thread_factory)
+    monkeypatch.setattr(service, "_seconds_until_next_refresh", Mock(return_value=3600))
+    wait = Mock(side_effect=lambda **kwargs: service._stop_event.set())
+    monkeypatch.setattr(service._stop_event, "wait", wait)
+
+    service.start_daily_refresh()
+    thread_factory.call_args.kwargs["target"]()
+
+    wait.assert_called_once_with(timeout=3600)
+    refresh.assert_called_once_with()
+
+
 def test_seconds_until_six_am_before_six_same_day(service):
     now = datetime(2026, 6, 15, 5, 0, 0)  # 05:00 -> 1 hour away
     assert service._seconds_until_next_six_am(now) == 3600

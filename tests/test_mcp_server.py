@@ -7,6 +7,7 @@ effect but return the original callable, so they can be invoked directly.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -21,6 +22,7 @@ from mcp_server.tools import (
     search_stops,
 )
 from server import create_server
+from services.ztm_schedule_repository import WARSAW, ScheduleEntry, ScheduleRepository
 from services.ztm_service import ZTMService
 from services.ztm_static_schedule import ZTMStaticSchedule
 
@@ -295,20 +297,27 @@ def _ctx_with(schedule: ZTMStaticSchedule) -> SimpleNamespace:
 
 
 def test_list_routes_and_stops_empty_storage():
-    out = list_routes_and_stops(_ctx_with(ZTMStaticSchedule.instance()))
-    assert out == {"routes": [], "stops": []}
+    with pytest.raises(ValueError, match="No GTFS schedule covers"):
+        list_routes_and_stops("2026-06-15", _ctx_with(ScheduleRepository()))
+
+
+def _resource_ctx(schedule):
+    repository = ScheduleRepository(
+        [ScheduleEntry("test.zip", datetime(2026, 6, 1, tzinfo=WARSAW), schedule)]
+    )
+    return _ctx_with(repository)
 
 
 def test_list_routes_and_stops_reflects_storage(sample_gtfs):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    out = list_routes_and_stops(_ctx_with(schedule))
+    out = list_routes_and_stops("2026-06-15", _resource_ctx(schedule))
     assert {r["route_id"] for r in out["routes"]} == {"R1", "R2"}
     assert {s["stop_id"] for s in out["stops"]} == {"S1", "S2", "S3"}
 
 
 def test_list_routes_and_stops_returns_plain_json_types(sample_gtfs):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    out = list_routes_and_stops(_ctx_with(schedule))
+    out = list_routes_and_stops("2026-06-15", _resource_ctx(schedule))
     assert type(out["routes"]) is list
     assert type(out["routes"][0]) is dict
     assert type(out["stops"]) is list
@@ -325,7 +334,9 @@ def test_service_to_storage_to_resource_pipeline(real_gtfs):
     """Mirror the production path: ZTMService loads -> storage holds -> resource reads."""
     schedule = ZTMStaticSchedule.load(real_gtfs)
 
-    out = list_routes_and_stops(_ctx_with(schedule))
+    out = list_routes_and_stops(
+        schedule.available_date_range[0].isoformat(), _resource_ctx(schedule)
+    )
     assert len(out["routes"]) == len(real_gtfs["routes"])
     assert len(out["stops"]) == len(real_gtfs["stops"])
     # Diacritics survive the full round trip.

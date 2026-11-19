@@ -18,9 +18,7 @@ async def ztm_service_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]
     ztm_service: ZTMService = ZTMService.instance()
     # Keep MCP requests out until the initial collection has been validated and published.
     # Downloading/parsing runs off the event loop; failure prevents an empty server starting.
-    logger.info("Loading initial GTFS schedules before accepting MCP requests")
-    await asyncio.to_thread(ztm_service.refresh_schedules)
-    ztm_service.start_daily_refresh(refresh_immediately=False)
+    await asyncio.to_thread(ztm_service.start_daily_refresh)
 
     try:
         yield {"ztm_static_storage": ztm_service.repository}

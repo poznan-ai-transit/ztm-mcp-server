@@ -194,10 +194,6 @@ def get_departures(
     _validate_limit(limit)
 
     schedule = _get_schedule(ctx, day)
-    try:
-        schedule.validate_date_range(day)
-    except ValueError as exc:
-        raise ToolError(str(exc)) from exc
 
     stop = schedule.get_stop(stop_id)
     route = schedule.get_route(route_id)

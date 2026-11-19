@@ -103,22 +103,24 @@ class ZTMService:
         self.repository = ScheduleRepository()
         self._initialized = True
 
-    def start_daily_refresh(self, *, refresh_immediately: bool = True) -> None:
+    def start_daily_refresh(self) -> None:
+        """Load initial schedules before returning, then refresh daily at 6 AM."""
         if self._thread is not None and self._thread.is_alive():
             raise RuntimeError("Daily refresh is already running")
 
         self._stop_event.clear()
+        logger.info("Loading initial GTFS schedules before accepting MCP requests")
+        self._refresh_schedules()
 
         def _runner() -> None:
             backoff = ini.refresh_retry_initial_seconds
-            if not refresh_immediately:
-                delay = self._seconds_until_next_refresh(datetime.now(WARSAW))
-                logger.info("Initial GTFS schedules ready; next refresh in %.0f seconds", delay)
-                self._stop_event.wait(timeout=delay)
+            delay = self._seconds_until_next_refresh(datetime.now(WARSAW))
+            logger.info("Initial GTFS schedules ready; next refresh in %.0f seconds", delay)
+            self._stop_event.wait(timeout=delay)
             while not self._stop_event.is_set():
                 try:
                     logger.info("Refreshing static GTFS schedules")
-                    self.refresh_schedules()
+                    self._refresh_schedules()
                     backoff = ini.refresh_retry_initial_seconds
                     delay = self._seconds_until_next_refresh(datetime.now(WARSAW))
                     logger.info("GTFS refresh completed; next refresh in %.0f seconds", delay)
@@ -154,7 +156,7 @@ class ZTMService:
             raise ValueError("No GTFS archives found on the ZTM archive page")
         return sorted(parser.archives, key=lambda item: (item.modified_at, item.filename))
 
-    def refresh_schedules(self, today: date | None = None) -> None:
+    def _refresh_schedules(self, today: date | None = None) -> None:
         """Publish all feeds reaching the rolling cutoff, including future feeds.
 
         Filenames prefilter downloads; actual GTFS metadata determines retained
@@ -225,12 +227,11 @@ class ZTMService:
         return (next_run - now).total_seconds()
 
     def _seconds_until_next_refresh(self, now: datetime) -> float:
-        midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         six_am = now.replace(hour=6, minute=0, second=0, microsecond=0)
         if six_am <= now:
             six_am += timedelta(days=1)
         # Timestamps account for Warsaw DST transitions when computing the wait.
-        return min(midnight.timestamp(), six_am.timestamp()) - now.timestamp()
+        return six_am.timestamp() - now.timestamp()
 
     def _fetch_static_gtfs_zip(
         self, gtfs_endpoint: str | None = None, *, filename: str | None = None
