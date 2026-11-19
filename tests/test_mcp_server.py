@@ -28,16 +28,16 @@ from services.ztm_static_schedule import ZTMStaticSchedule
 
 
 def test_search_stops_uses_schedule_wrapper(sample_gtfs):
-    ZTMStaticSchedule.load(sample_gtfs)
-    results = search_stops("zabink", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
+    results = search_stops("zabink", date="2026-06-15", ctx=_ctx_for_schedule(schedule))
     assert results
     assert results[0]["stop_id"] == "S2"
     assert results[0]["stop_name"] == "Żabinko"
 
 
 def test_search_routes_uses_schedule_wrapper(sample_gtfs):
-    ZTMStaticSchedule.load(sample_gtfs)
-    results = search_routes("Łęczyca", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
+    results = search_routes("Łęczyca", date="2026-06-15", ctx=_ctx_for_schedule(schedule))
     assert results
     assert results[0]["route_id"] == "R1"
     assert results[0]["route_long_name"] == "Łęczyca"
@@ -48,29 +48,37 @@ def test_search_routes_uses_schedule_wrapper(sample_gtfs):
 @pytest.mark.parametrize("query", ["", " ", "\t\n"])
 def test_search_rejects_blank_queries(search, query):
     with pytest.raises(ToolError, match="Invalid query"):
-        search(query, ctx=_ctx_with(None))
+        search(query, ctx=_ctx_with(ScheduleRepository()))
 
 
 @pytest.mark.parametrize("search", [search_stops, search_routes])
 @pytest.mark.parametrize("limit", [-1, 0, 101, True, 1.5])
 def test_search_rejects_invalid_limits(search, limit):
     with pytest.raises(ToolError, match="Invalid limit. Use an integer from 1 to 100."):
-        search("Rynek", limit=limit, ctx=_ctx_with(None))
+        search("Rynek", limit=limit, ctx=_ctx_with(ScheduleRepository()))
 
 
 @pytest.mark.parametrize("search,query", [(search_stops, "Rynek"), (search_routes, "R1")])
 @pytest.mark.parametrize("limit", [1, 100])
 def test_search_accepts_limit_boundaries(sample_gtfs, search, query, limit):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    result = search(query, limit=limit, ctx=_ctx_with(schedule))
+    result = search(query, limit=limit, date="2026-06-15", ctx=_ctx_for_schedule(schedule))
     assert 1 <= len(result) <= limit
-    assert search("zzzzzzzzzzzzzzzzzzzzzz", limit=limit, ctx=_ctx_with(schedule)) == []
+    assert (
+        search(
+            "zzzzzzzzzzzzzzzzzzzzzz",
+            limit=limit,
+            date="2026-06-15",
+            ctx=_ctx_for_schedule(schedule),
+        )
+        == []
+    )
 
 
 def test_departures_filter_line_before_limit(sample_gtfs):
-    ZTMStaticSchedule.load(sample_gtfs)
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
     result = get_departures(
-        "S2", "R2", "2026-06-15", "05:00", limit=1, ctx=_ctx_with(ZTMStaticSchedule.instance())
+        "S2", "R2", "2026-06-15", "05:00", limit=1, ctx=_ctx_for_schedule(schedule)
     )
     assert result["stop_name"] == "Żabinko"
     assert result["route_short_name"] == "2"
@@ -81,7 +89,7 @@ def test_departures_filter_line_before_limit(sample_gtfs):
 
 def test_departures_filter_direction_before_limit(sample_gtfs):
     sample_gtfs["trips"][1]["direction_id"] = "1"
-    ZTMStaticSchedule.load(sample_gtfs)
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
     result = get_departures(
         "S1",
         "R1",
@@ -89,7 +97,7 @@ def test_departures_filter_direction_before_limit(sample_gtfs):
         "05:00",
         direction_id=1,
         limit=1,
-        ctx=_ctx_with(ZTMStaticSchedule.instance()),
+        ctx=_ctx_for_schedule(schedule),
     )
     assert [d["trip_id"] for d in result["departures"]] == ["T2"]
     assert result["departures"][0]["departure_datetime"] == "2026-06-16T01:30:00"
@@ -105,11 +113,11 @@ def test_departures_filter_direction_before_limit(sample_gtfs):
     ],
 )
 def test_departures_no_matching_service(sample_gtfs, stop, route, day, time, direction):
-    ZTMStaticSchedule.load(sample_gtfs)
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
     assert (
-        get_departures(
-            stop, route, day, time, direction, ctx=_ctx_with(ZTMStaticSchedule.instance())
-        )["departures"]
+        get_departures(stop, route, day, time, direction, ctx=_ctx_for_schedule(schedule))[
+            "departures"
+        ]
         == []
     )
 
@@ -117,8 +125,10 @@ def test_departures_no_matching_service(sample_gtfs, stop, route, day, time, dir
 @pytest.mark.parametrize("day", ["2026-05-31", "2026-07-01"])
 def test_departures_reject_dates_outside_dataset(sample_gtfs, day):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    with pytest.raises(ToolError, match="Supported date range: 2026-06-01 to 2026-06-30") as exc:
-        get_departures("S1", "R1", day, "05:00", ctx=_ctx_with(schedule))
+    with pytest.raises(
+        ToolError, match=r"Supported date ranges \(inclusive\): 2026-06-01 to 2026-06-30"
+    ) as exc:
+        get_departures("S1", "R1", day, "05:00", ctx=_ctx_for_schedule(schedule))
     assert day in str(exc.value)
 
 
@@ -133,7 +143,7 @@ def test_departures_accept_feed_boundaries_and_overnight_trips(
     sample_gtfs, day, departure_datetime
 ):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    result = get_departures("S1", "R1", day, "23:00", ctx=_ctx_with(schedule))
+    result = get_departures("S1", "R1", day, "23:00", ctx=_ctx_for_schedule(schedule))
     assert result["departures"][0]["departure_datetime"] == departure_datetime
 
 
@@ -142,18 +152,16 @@ def test_departures_calendar_exceptions_and_inclusive_time(sample_gtfs):
         {"service_id": "WKD", "date": "20260614", "exception_type": "1"},
         {"service_id": "WKD", "date": "20260615", "exception_type": "2"},
     ]
-    ZTMStaticSchedule.load(sample_gtfs)
-    result = get_departures(
-        "S2", "R2", "2026-06-14", "06:10", ctx=_ctx_with(ZTMStaticSchedule.instance())
-    )
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
+    result = get_departures("S2", "R2", "2026-06-14", "06:10", ctx=_ctx_for_schedule(schedule))
     assert result == get_departures(
-        "S2", "R2", "2026-06-14", "06:10", ctx=_ctx_with(ZTMStaticSchedule.instance())
+        "S2", "R2", "2026-06-14", "06:10", ctx=_ctx_for_schedule(schedule)
     )
     assert result["departures"][0]["departure_time"] == "06:10:00"
     assert (
-        get_departures(
-            "S2", "R2", "2026-06-15", "06:10", ctx=_ctx_with(ZTMStaticSchedule.instance())
-        )["departures"]
+        get_departures("S2", "R2", "2026-06-15", "06:10", ctx=_ctx_for_schedule(schedule))[
+            "departures"
+        ]
         == []
     )
 
@@ -177,7 +185,7 @@ def test_departures_calendar_exceptions_and_inclusive_time(sample_gtfs):
     ],
 )
 def test_departures_invalid_input(sample_gtfs, override):
-    ZTMStaticSchedule.load(sample_gtfs)
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
     arguments = {
         "stop_id": "S2",
         "route_id": "R2",
@@ -185,17 +193,17 @@ def test_departures_invalid_input(sample_gtfs, override):
         "time": "06:10",
     }
     with pytest.raises(ToolError):
-        get_departures(**(arguments | override), ctx=_ctx_with(ZTMStaticSchedule.instance()))
+        get_departures(**(arguments | override), ctx=_ctx_for_schedule(schedule))
 
 
 def test_routes_for_stop_are_sorted_and_serializable(sample_gtfs):
-    ZTMStaticSchedule.load(sample_gtfs)
-    result = get_routes_for_stop("S2", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
+    result = get_routes_for_stop("S2", date="2026-06-15", ctx=_ctx_for_schedule(schedule))
     assert [r["route_id"] for r in result] == ["R1", "R2"]
     assert result[0]["route_short_name"] == "1"
-    assert result == get_routes_for_stop("S2", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+    assert result == get_routes_for_stop("S2", date="2026-06-15", ctx=_ctx_for_schedule(schedule))
     with pytest.raises(ToolError, match="search_stops"):
-        get_routes_for_stop("missing", ctx=_ctx_with(ZTMStaticSchedule.instance()))
+        get_routes_for_stop("missing", date="2026-06-15", ctx=_ctx_for_schedule(schedule))
 
 
 def _resolve_schema(root: dict, node: dict) -> dict:
@@ -212,18 +220,16 @@ def _resolve_schema(root: dict, node: dict) -> dict:
 
 
 def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
-    ZTMStaticSchedule.load(sample_gtfs)
+    schedule = ZTMStaticSchedule.load(sample_gtfs)
 
+    ZTMService.instance().repository = _repository_with(schedule)
     monkeypatch.setattr(ZTMService, "start_daily_refresh", lambda self: None)
     monkeypatch.setattr(ZTMService, "stop_daily_refresh", lambda self: None)
 
     async def check():
         async with Client(create_server()) as client:
-            # The lifespan has captured the schedule; tools must not fetch the singleton.
-            def unexpected_instance():
-                raise AssertionError("Tool bypassed lifespan storage")
-
-            monkeypatch.setattr(ZTMStaticSchedule, "instance", unexpected_instance)
+            # Requests must use the repository captured by the lifespan.
+            ZTMService.instance().repository = ScheduleRepository()
             tools = await client.list_tools()
             assert all("ctx" not in tool.inputSchema["properties"] for tool in tools)
             by_name = {tool.name: tool for tool in tools}
@@ -261,9 +267,11 @@ def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
                 departure["properties"].keys()
             )
             names = {tool.name for tool in tools}
-            stops = await client.call_tool("search_stops", {"query": "Rynek"})
+            stops = await client.call_tool("search_stops", {"query": "Rynek", "date": "2026-06-15"})
             assert stops.structured_content["result"][0]["stop_id"] == "S1"
-            found_routes = await client.call_tool("search_routes", {"query": "R1"})
+            found_routes = await client.call_tool(
+                "search_routes", {"query": "R1", "date": "2026-06-15"}
+            )
             assert found_routes.structured_content["result"][0]["route_id"] == "R1"
             assert {"get_departures", "get_routes_for_stop"} <= names
             departure_arguments = {
@@ -274,11 +282,15 @@ def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
             }
             departures = await client.call_tool("get_departures", departure_arguments)
             assert departures.structured_content["departures"][0]["departure_time"] == "06:10:00"
-            with pytest.raises(ToolError, match="Supported date range: 2026-06-01 to 2026-06-30"):
+            with pytest.raises(
+                ToolError, match=r"Supported date ranges \(inclusive\): 2026-06-01 to 2026-06-30"
+            ):
                 await client.call_tool(
                     "get_departures", departure_arguments | {"date": "2026-07-01"}
                 )
-            routes = await client.call_tool("get_routes_for_stop", {"stop_id": "S2"})
+            routes = await client.call_tool(
+                "get_routes_for_stop", {"stop_id": "S2", "date": "2026-06-15"}
+            )
             assert [r["route_id"] for r in routes.structured_content["result"]] == ["R1", "R2"]
 
     asyncio.run(check())
@@ -289,10 +301,10 @@ def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def _ctx_with(schedule: ZTMStaticSchedule) -> SimpleNamespace:
+def _ctx_with(repository: ScheduleRepository) -> SimpleNamespace:
     """Minimal stand-in for a fastmcp Context exposing the lifespan storage."""
     return SimpleNamespace(
-        request_context=SimpleNamespace(lifespan_context={"ztm_static_storage": schedule})
+        request_context=SimpleNamespace(lifespan_context={"ztm_static_storage": repository})
     )
 
 
@@ -301,23 +313,26 @@ def test_list_routes_and_stops_empty_storage():
         list_routes_and_stops("2026-06-15", _ctx_with(ScheduleRepository()))
 
 
-def _resource_ctx(schedule):
-    repository = ScheduleRepository(
+def _repository_with(schedule):
+    return ScheduleRepository(
         [ScheduleEntry("test.zip", datetime(2026, 6, 1, tzinfo=WARSAW), schedule)]
     )
-    return _ctx_with(repository)
+
+
+def _ctx_for_schedule(schedule):
+    return _ctx_with(_repository_with(schedule))
 
 
 def test_list_routes_and_stops_reflects_storage(sample_gtfs):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    out = list_routes_and_stops("2026-06-15", _resource_ctx(schedule))
+    out = list_routes_and_stops("2026-06-15", _ctx_for_schedule(schedule))
     assert {r["route_id"] for r in out["routes"]} == {"R1", "R2"}
     assert {s["stop_id"] for s in out["stops"]} == {"S1", "S2", "S3"}
 
 
 def test_list_routes_and_stops_returns_plain_json_types(sample_gtfs):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    out = list_routes_and_stops("2026-06-15", _resource_ctx(schedule))
+    out = list_routes_and_stops("2026-06-15", _ctx_for_schedule(schedule))
     assert type(out["routes"]) is list
     assert type(out["routes"][0]) is dict
     assert type(out["stops"]) is list
@@ -335,7 +350,7 @@ def test_service_to_storage_to_resource_pipeline(real_gtfs):
     schedule = ZTMStaticSchedule.load(real_gtfs)
 
     out = list_routes_and_stops(
-        schedule.available_date_range[0].isoformat(), _resource_ctx(schedule)
+        schedule.available_date_range[0].isoformat(), _ctx_for_schedule(schedule)
     )
     assert len(out["routes"]) == len(real_gtfs["routes"])
     assert len(out["stops"]) == len(real_gtfs["stops"])
