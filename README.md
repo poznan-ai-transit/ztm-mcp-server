@@ -78,6 +78,13 @@ python examples/05_vehicle_dictionary.py
 
 ## API overview
 
+Routes and stops are available at the MCP resource
+`resource://ztm_static_storage/list_routes_and_stops/{date}`. The date is required in
+`YYYY-MM-DD` format, for example `2026-06-15`.
+
+The resource returns all routes and stops in the selected feed, including those without
+service on the selected day. Dates outside loaded feed coverage return an error.
+
 | Feed | Format | File |
 |---|---|---|
 | Static schedule | GTFS ZIP | `getGTFSFile` |

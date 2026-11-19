@@ -16,6 +16,7 @@ from services.ztm_connection_search import (
     ConnectionSearchRequest,
     ZTMConnectionSearchService,
 )
+from services.ztm_schedule_repository import ScheduleRepository, warsaw_today
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
@@ -33,18 +34,38 @@ def _validate_search(query: str, limit: int) -> None:
     _validate_limit(limit)
 
 
-def _get_schedule(ctx: Context) -> ZTMStaticSchedule:
-    """Read the shared schedule published by the server lifespan."""
+def _parse_service_date(value: str | None) -> calendar_date:
+    if value is None:
+        return warsaw_today()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ToolError("Invalid date. Use YYYY-MM-DD.")
+    try:
+        return calendar_date.fromisoformat(value)
+    except ValueError as exc:
+        raise ToolError("Invalid date. Provide a valid calendar date as YYYY-MM-DD.") from exc
+
+
+def _get_schedule(ctx: Context, day: calendar_date) -> ZTMStaticSchedule:
+    """Pin one date-selected feed for the whole tool call."""
     request_context = ctx.request_context
     if request_context is None:
         raise RuntimeError("Tool requires an active MCP request context")
-    return request_context.lifespan_context["ztm_static_storage"]
+    repository: ScheduleRepository = request_context.lifespan_context["ztm_static_storage"]
+    try:
+        return repository.for_date(day)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
 
 
 @mcp_tools.tool()
-def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[StopMatch]:
+def search_stops(
+    query: str, limit: int = 10, *, date: str | None = None, ctx: Context
+) -> list[StopMatch]:
     """
     Search transit stops by name.
+
+    Optional date (YYYY-MM-DD) selects a feed, defaulting to today in Europe/Warsaw.
+    For a departure or journey query, resolve IDs using that same service date.
 
     Before calling, obtain a stop name or place from the conversation. If missing, ask
     which stop and wait for the answer. Do not guess a name or use an empty query.
@@ -63,7 +84,7 @@ def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[StopMatch
     """
     logger.debug("search_stops: query=%r limit=%d", query, limit)
     _validate_search(query, limit)
-    schedule: ZTMStaticSchedule = _get_schedule(ctx)
+    schedule = _get_schedule(ctx, _parse_service_date(date))
     matched_stops = [
         {**asdict(match.stop), "score": match.score}
         for match in schedule.fuzzy_search_stops(query, limit=limit)
@@ -73,9 +94,14 @@ def search_stops(query: str, limit: int = 10, *, ctx: Context) -> list[StopMatch
 
 
 @mcp_tools.tool()
-def search_routes(query: str, limit: int = 10, *, ctx: Context) -> list[RouteSearchResult]:
+def search_routes(
+    query: str, limit: int = 10, *, date: str | None = None, ctx: Context
+) -> list[RouteSearchResult]:
     """
     Search routes by number or name.
+
+    Optional date (YYYY-MM-DD) selects a feed, defaulting to today in Europe/Warsaw.
+    For a departure query, resolve IDs using that same service date.
 
     Before calling, obtain a line number or route name from the conversation.
     If missing, ask which line and wait for the answer. Do not guess or use an
@@ -90,17 +116,19 @@ def search_routes(query: str, limit: int = 10, *, ctx: Context) -> list[RouteSea
     """
     logger.debug("search_routes: query=%r limit=%d", query, limit)
     _validate_search(query, limit)
-    schedule: ZTMStaticSchedule = _get_schedule(ctx)
+    schedule = _get_schedule(ctx, _parse_service_date(date))
     routes = schedule.search_routes(query, limit)
     logger.debug("search_routes returned %d routes", len(routes))
     return routes
 
 
 @mcp_tools.tool()
-def get_routes_for_stop(stop_id: StopId, *, ctx: Context) -> list[Route]:
+def get_routes_for_stop(stop_id: StopId, *, date: str | None = None, ctx: Context) -> list[Route]:
     """List static routes serving a stop. Resolve stop_id with search_stops first.
 
-    This lists routes in the dataset, regardless of their operating date.
+    Optional date (YYYY-MM-DD) selects a feed, defaulting to today in Europe/Warsaw.
+    Resolve stop_id using that same date. This lists routes in the selected feed,
+    regardless of their operating date within that feed.
     If the stop is missing from the conversation, ask which stop and wait for
     the answer. Reuse a previously resolved stop_id when applicable; never
     invent one. This lookup does not require a line, date, or time.
@@ -109,7 +137,7 @@ def get_routes_for_stop(stop_id: StopId, *, ctx: Context) -> list[Route]:
     do not substitute a stop name, stop_code, or stop_sequence.
     """
     logger.debug("get_routes_for_stop: stop_id=%r", stop_id)
-    schedule = _get_schedule(ctx)
+    schedule = _get_schedule(ctx, _parse_service_date(date))
     if schedule.get_stop(stop_id) is None:
         raise ToolError("Unknown stop_id. Use search_stops to find a valid stop.")
     routes = schedule.get_routes_for_stop(stop_id)
@@ -136,7 +164,7 @@ def get_departures(
     guess them. Check applicable same-name platforms and merge departures without duplicates.
     Direction and limit are optional and do not require clarification.
 
-    Resolve IDs using search_stops and search_routes. Pass stop_id unchanged
+    Resolve IDs using search_stops and search_routes with this same date. Pass stop_id unchanged
     as a JSON string, preserving leading zeros; do not substitute a stop name,
     stop_code, or stop_sequence. Date is the GTFS service
     day (YYYY-MM-DD), and time is HH:MM (00:00 through 23:59), inclusive.
@@ -146,7 +174,7 @@ def get_departures(
     departure_datetime has no UTC offset and must not be interpreted as UTC.
     Limit must be an integer from 1 to 100. No live delays are provided.
     Direction is optional (0 or 1).
-    Dates outside the loaded dataset are rejected with its supported date range.
+    Dates outside the loaded schedules are rejected with the supported date ranges.
     An empty departures list means no matching departures in that service day.
     """
     logger.debug(
@@ -158,23 +186,14 @@ def get_departures(
         direction_id,
         limit,
     )
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
-        raise ToolError("Invalid date. Use YYYY-MM-DD.")
-    try:
-        day = calendar_date.fromisoformat(date)
-    except ValueError as exc:
-        raise ToolError("Invalid date. Provide a valid calendar date as YYYY-MM-DD.") from exc
+    day = _parse_service_date(date)
     if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time):
         raise ToolError("Invalid time. Use HH:MM from 00:00 through 23:59.")
     if direction_id is not None and direction_id not in (0, 1):
         raise ToolError("Invalid direction_id. Use 0 or 1, or omit it.")
     _validate_limit(limit)
 
-    schedule = _get_schedule(ctx)
-    try:
-        schedule.validate_date_range(day)
-    except ValueError as exc:
-        raise ToolError(str(exc)) from exc
+    schedule = _get_schedule(ctx, day)
 
     stop = schedule.get_stop(stop_id)
     route = schedule.get_route(route_id)
@@ -222,7 +241,7 @@ def search_connection(
     Before calling, obtain both stop IDs, the service date, and departure
     time from the conversation. Ask one concise question for missing details.
     Reuse previously resolved stop IDs; never invent them. Resolve stop IDs
-    using search_stops and clarify ambiguous matches.
+    using search_stops with this same date and clarify ambiguous matches.
 
     Date is the GTFS service day (YYYY-MM-DD).
     Time is HH:MM (00:00 through 23:59), inclusive.
@@ -235,6 +254,7 @@ def search_connection(
 
     This searches static GTFS data only. It does not include live delays
     or walking transfers. An empty list means no matching journeys were found.
+    The selected feed is used throughout; journeys cannot combine different feeds.
     """
     logger.debug(
         "search_connection: from_stop_id=%r to_stop_id=%r "
@@ -248,13 +268,7 @@ def search_connection(
     )
 
     # Validate date.
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
-        raise ToolError("Invalid date. Use YYYY-MM-DD.")
-
-    try:
-        day = calendar_date.fromisoformat(date)
-    except ValueError as exc:
-        raise ToolError("Invalid date. Provide a valid calendar date as YYYY-MM-DD.") from exc
+    day = _parse_service_date(date)
 
     # Validate time.
     if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time):
@@ -268,7 +282,7 @@ def search_connection(
         raise ToolError("Invalid limit. Use a number from 1 to 100.")
 
     # Use the schedule initialized by the MCP server lifespan.
-    schedule = _get_schedule(ctx)
+    schedule = _get_schedule(ctx, day)
 
     # Validate stop IDs before searching.
     if schedule.get_stop(from_stop_id) is None:

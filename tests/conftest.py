@@ -1,9 +1,7 @@
 """Shared pytest fixtures.
 
-Both ``ZTMStaticSchedule`` and ``ZTMService`` are process-wide singletons that
-cache their instance on a class attribute. Without isolation, data written by one
-test would leak into the next and break determinism. The autouse fixture below
-resets the cached instances around every test so each one starts clean.
+``ZTMStaticSchedule`` instances own independent feeds. Only ``ZTMService`` is
+a singleton; reset it around each test to isolate its repository and worker.
 """
 
 from __future__ import annotations
@@ -14,17 +12,14 @@ from services.ztm_service import ZTMService
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 
-def _reset_singletons() -> None:
-    ZTMStaticSchedule._instance = None
-    ZTMService._instance = None
-
-
 @pytest.fixture(autouse=True)
-def fresh_singletons():
-    """Give every test its own ``ZTMStaticSchedule`` / ``ZTMService`` instance."""
-    _reset_singletons()
+def fresh_service():
+    """Give every test its own service and stop any worker it starts."""
+    ZTMService._instance = None
     yield
-    _reset_singletons()
+    if ZTMService._instance is not None:
+        ZTMService._instance.stop_daily_refresh()
+    ZTMService._instance = None
 
 
 @pytest.fixture(scope="session")
@@ -36,7 +31,20 @@ def real_gtfs() -> dict:
     re-parsing. Tests that exercise the loading itself call the service directly.
     Session scope means this is unaffected by the per-test singleton reset.
     """
-    return ZTMService().get_static_gtfs()
+    service = ZTMService()
+    with service._mock_gtfs_zip() as archive:
+        return {
+            name: service._read_csv_from_zip(archive, f"{name}.txt")
+            for name in (
+                "stops",
+                "routes",
+                "stop_times",
+                "trips",
+                "calendar",
+                "feed_info",
+                "calendar_dates",
+            )
+        }
 
 
 @pytest.fixture
