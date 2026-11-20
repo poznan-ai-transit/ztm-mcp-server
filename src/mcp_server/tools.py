@@ -11,13 +11,14 @@ from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
 from logging_config import logger
-from mcp_server.schemas import DeparturesResponse, Route, RouteSearchResult, StopId, StopMatch
+from mcp_server.schemas import DeparturesResponse, Route, RouteSearchResult, StopId, StopMatch, ScheduledDeparture
 from services.ztm_connection_search import (
     ConnectionSearchRequest,
     ZTMConnectionSearchService,
 )
 from services.ztm_schedule_repository import ScheduleRepository, warsaw_today
 from services.ztm_static_schedule import ZTMStaticSchedule
+from services.ztm_realtime_delays import ZTMRealtimeDelays
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 
@@ -145,6 +146,65 @@ def get_routes_for_stop(stop_id: StopId, *, date: str | None = None, ctx: Contex
     return [asdict(route) for route in sorted(routes, key=lambda route: route.route_id)]
 
 
+def _enrich_departure_with_realtime(
+    departure: ScheduledDeparture,
+    realtime_service: ZTMRealtimeDelays | None,
+    service_day: calendar_date,
+) -> ScheduledDeparture:
+    """Enrich one scheduled departure without changing its scheduled fields."""
+
+    result: ScheduledDeparture = {
+        **departure,
+        "realtime": False,
+        "departure_delay": None,
+        "realtime_departure_datetime": None,
+        "realtime_status": None,
+        "cancelled": False,
+    }
+
+    if realtime_service is None:
+        return result
+
+    trip_update = realtime_service.get_trip_updates(
+        departure["trip_id"],
+        service_day,
+    )
+
+    if trip_update is None:
+        return result
+
+    result["realtime"] = True
+
+    # A cancelled trip may not contain any stop-level updates.
+    if trip_update.trip_schedule_relationship == "CANCELED":
+        result["cancelled"] = True
+        result["realtime_status"] = "CANCELED"
+        return result
+
+    stop_update = realtime_service.get_stop_update(
+        departure["trip_id"],
+        departure["stop_sequence"],
+        service_day,
+    )
+
+    if stop_update is None:
+        return result
+
+    result["realtime_status"] = stop_update.schedule_relationship
+
+    if stop_update.schedule_relationship == "SKIPPED":
+        return result
+
+    result["departure_delay"] = stop_update.departure_delay
+
+    if stop_update.predicted_departure is not None:
+        result["realtime_departure_datetime"] = (
+            stop_update.predicted_departure.isoformat()
+        )
+
+    return result
+
+
 @mcp_tools.tool()
 def get_departures(
     stop_id: StopId,
@@ -210,7 +270,42 @@ def get_departures(
         route_id=route_id,
         direction_id=direction_id,
     )
-    logger.debug("get_departures returned %d departures", len(departures))
+
+    # Retrieve the realtime service from the MCP lifespan context.
+    request_context = ctx.request_context
+
+    realtime_service: ZTMRealtimeDelays | None = None
+
+    if request_context is not None:
+        realtime_service = request_context.lifespan_context.get(
+            "ztm_realtime_delays"
+        )
+
+    # Enrich the scheduled departures.
+    enriched_departures = [
+        _enrich_departure_with_realtime(
+            departure=departure,
+            realtime_service=realtime_service,
+            service_day=day,
+        )
+        for departure in departures
+    ]
+
+    has_realtime = any(
+        departure["realtime"]
+        for departure in enriched_departures
+    )
+
+    logger.debug(
+        "get_departures returned %d departures; %d with realtime information",
+        len(enriched_departures),
+        sum(
+            1
+            for departure in enriched_departures
+            if departure["realtime"]
+        ),
+    )
+
     return {
         "stop_id": stop.stop_id,
         "stop_name": stop.stop_name,
@@ -219,9 +314,10 @@ def get_departures(
         "date": date,
         "time": time,
         "direction_id": direction_id,
-        "realtime": False,
-        "departures": departures,
+        "realtime": has_realtime,
+        "departures": enriched_departures,
     }
+
 
 
 @mcp_tools.tool()
