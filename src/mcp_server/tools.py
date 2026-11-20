@@ -11,14 +11,21 @@ from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
 from logging_config import logger
-from mcp_server.schemas import DeparturesResponse, Route, RouteSearchResult, StopId, StopMatch, ScheduledDeparture
+from mcp_server.schemas import (
+    DeparturesResponse,
+    Route,
+    RouteSearchResult,
+    ScheduledDeparture,
+    StopId,
+    StopMatch,
+)
 from services.ztm_connection_search import (
     ConnectionSearchRequest,
     ZTMConnectionSearchService,
 )
+from services.ztm_realtime_delays import ZTMRealtimeDelays
 from services.ztm_schedule_repository import ScheduleRepository, warsaw_today
 from services.ztm_static_schedule import ZTMStaticSchedule
-from services.ztm_realtime_delays import ZTMRealtimeDelays
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 
@@ -198,9 +205,7 @@ def _enrich_departure_with_realtime(
     result["departure_delay"] = stop_update.departure_delay
 
     if stop_update.predicted_departure is not None:
-        result["realtime_departure_datetime"] = (
-            stop_update.predicted_departure.isoformat()
-        )
+        result["realtime_departure_datetime"] = stop_update.predicted_departure.isoformat()
 
     return result
 
@@ -277,9 +282,7 @@ def get_departures(
     realtime_service: ZTMRealtimeDelays | None = None
 
     if request_context is not None:
-        realtime_service = request_context.lifespan_context.get(
-            "ztm_realtime_delays"
-        )
+        realtime_service = request_context.lifespan_context.get("ztm_realtime_delays")
 
     # Enrich the scheduled departures.
     enriched_departures = [
@@ -291,19 +294,12 @@ def get_departures(
         for departure in departures
     ]
 
-    has_realtime = any(
-        departure["realtime"]
-        for departure in enriched_departures
-    )
+    has_realtime = any(departure["realtime"] for departure in enriched_departures)
 
     logger.debug(
         "get_departures returned %d departures; %d with realtime information",
         len(enriched_departures),
-        sum(
-            1
-            for departure in enriched_departures
-            if departure["realtime"]
-        ),
+        sum(1 for departure in enriched_departures if departure["realtime"]),
     )
 
     return {
@@ -317,7 +313,6 @@ def get_departures(
         "realtime": has_realtime,
         "departures": enriched_departures,
     }
-
 
 
 @mcp_tools.tool()

@@ -9,8 +9,8 @@ from fastmcp import FastMCP
 from fastmcp.server.lifespan import lifespan
 
 from logging_config import logger
-from services.ztm_service import ZTMService
 from services.ztm_realtime_delays import ZTMRealtimeDelays
+from services.ztm_service import ZTMService
 
 
 @lifespan
@@ -24,9 +24,10 @@ async def ztm_service_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]
     try:
         realtime_service: ZTMRealtimeDelays = ZTMRealtimeDelays(ztm_service.repository)
         await asyncio.to_thread(realtime_service.start_auto_refresh, interval_seconds=30)
-        yield {"ztm_static_storage": ztm_service.repository,
-               "ztm_realtime_delays": realtime_service
-               }
+        yield {
+            "ztm_static_storage": ztm_service.repository,
+            "ztm_realtime_delays": realtime_service,
+        }
     finally:
         if realtime_service is not None:
             realtime_service.stop_auto_refresh()

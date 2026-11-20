@@ -1,11 +1,10 @@
-
 from __future__ import annotations
 
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from types import MappingProxyType
-from typing import Mapping
 from zoneinfo import ZoneInfo
 
 import requests
@@ -13,13 +12,12 @@ from google.transit import gtfs_realtime_pb2
 
 from ini import ini
 from logging_config import logger
+from services.ztm_schedule_repository import ScheduleRepository
 from services.ztm_static_schedule import (
     StopTime,
     secs_to_datetime,
     secs_to_hms,
 )
-from services.ztm_schedule_repository import ScheduleRepository
-
 
 POZNAN_TZ = ZoneInfo("Europe/Warsaw")
 
@@ -28,6 +26,7 @@ POZNAN_TZ = ZoneInfo("Europe/Warsaw")
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class GTFSRealtimeError(RuntimeError):
     """Raised when the realtime GTFS feed cannot be fetched or parsed."""
 
@@ -35,6 +34,7 @@ class GTFSRealtimeError(RuntimeError):
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class RealtimeStopUpdate:
@@ -81,6 +81,7 @@ class RealtimeSnapshot:
 # Service
 # ---------------------------------------------------------------------------
 
+
 class ZTMRealtimeDelays:
     BASE_URL = "https://www.ztm.poznan.pl"
     RT_ENDPOINT = f"{BASE_URL}/pl/dla-deweloperow/getGtfsRtFile"
@@ -116,9 +117,7 @@ class ZTMRealtimeDelays:
             return feed
 
         except Exception as exc:
-            raise GTFSRealtimeError(
-                f"Unable to fetch GTFS-Realtime feed: {exc}"
-            ) from exc
+            raise GTFSRealtimeError(f"Unable to fetch GTFS-Realtime feed: {exc}") from exc
 
     # -----------------------------------------------------------------------
     # Loading
@@ -194,7 +193,6 @@ class ZTMRealtimeDelays:
                     trip_id,
                     service_day,
                 )
-                
 
             # Each trip may belong to a different static GTFS archive.
             try:
@@ -224,10 +222,7 @@ class ZTMRealtimeDelays:
 
             route = data.routes_by_id.get(trip.route_id)
 
-            static_by_sequence = {
-                stop.stop_sequence: stop
-                for stop in static_stop_times
-            }
+            static_by_sequence = {stop.stop_sequence: stop for stop in static_stop_times}
 
             static_by_id: dict[str, list[StopTime]] = {}
             for stop in static_stop_times:
@@ -240,9 +235,7 @@ class ZTMRealtimeDelays:
 
                 # stop_sequence is the preferred identifier.
                 if realtime_stop.HasField("stop_sequence"):
-                    static_stop = static_by_sequence.get(
-                        realtime_stop.stop_sequence
-                    )
+                    static_stop = static_by_sequence.get(realtime_stop.stop_sequence)
 
                 # Only use stop_id when it uniquely identifies an occurrence.
                 if static_stop is None and realtime_stop.stop_id:
@@ -253,10 +246,7 @@ class ZTMRealtimeDelays:
                 if static_stop is None:
                     continue
 
-                if (
-                    realtime_stop.stop_id
-                    and realtime_stop.stop_id != static_stop.stop_id
-                ):
+                if realtime_stop.stop_id and realtime_stop.stop_id != static_stop.stop_id:
                     logger.warning(
                         "GTFS-RT stop mismatch for trip %s sequence %s",
                         trip_id,
@@ -292,8 +282,8 @@ class ZTMRealtimeDelays:
                     )
 
                     departure_delay = arrival[1]
-                    predicted_departure_dt = (
-                        scheduled_departure_dt + timedelta(seconds=departure_delay)
+                    predicted_departure_dt = scheduled_departure_dt + timedelta(
+                        seconds=departure_delay
                     )
 
                     departure = (
@@ -304,8 +294,7 @@ class ZTMRealtimeDelays:
                     departure_delay_estimated = True
 
                 stop_relationship = (
-                    gtfs_realtime_pb2.TripUpdate.StopTimeUpdate
-                    .ScheduleRelationship.Name(
+                    gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.ScheduleRelationship.Name(
                         realtime_stop.schedule_relationship
                     )
                     if realtime_stop.HasField("schedule_relationship")
@@ -313,29 +302,19 @@ class ZTMRealtimeDelays:
                 )
 
                 # Retain SKIPPED and other meaningful relationship-only updates.
-                if (
-                    arrival is None
-                    and departure is None
-                    and stop_relationship == "SCHEDULED"
-                ):
+                if arrival is None and departure is None and stop_relationship == "SCHEDULED":
                     continue
 
                 updates.append(
                     RealtimeStopUpdate(
                         trip_id=trip_id,
                         route_id=trip.route_id,
-                        route_short_name=(
-                            route.route_short_name if route else trip.route_id
-                        ),
+                        route_short_name=(route.route_short_name if route else trip.route_id),
                         stop_id=static_stop.stop_id,
                         stop_name=stop.stop_name if stop else None,
                         stop_sequence=static_stop.stop_sequence,
-                        scheduled_arrival=secs_to_hms(
-                            static_stop.arrival_secs
-                        ),
-                        scheduled_departure=secs_to_hms(
-                            static_stop.departure_secs
-                        ),
+                        scheduled_arrival=secs_to_hms(static_stop.arrival_secs),
+                        scheduled_departure=secs_to_hms(static_stop.departure_secs),
                         predicted_arrival=arrival[0] if arrival else None,
                         predicted_departure=departure[0] if departure else None,
                         arrival_delay=arrival[1] if arrival else None,
@@ -362,9 +341,7 @@ class ZTMRealtimeDelays:
             trips[key] = RealtimeTripUpdate(
                 trip_id=trip_id,
                 route_id=trip.route_id,
-                route_short_name=(
-                    route.route_short_name if route else trip.route_id
-                ),
+                route_short_name=(route.route_short_name if route else trip.route_id),
                 trip_headsign=trip.trip_headsign,
                 service_day=service_day,
                 timestamp=(
@@ -375,9 +352,7 @@ class ZTMRealtimeDelays:
                     if trip_update.HasField("timestamp")
                     else None
                 ),
-                stop_updates=tuple(
-                    sorted(updates, key=lambda item: item.stop_sequence)
-                ),
+                stop_updates=tuple(sorted(updates, key=lambda item: item.stop_sequence)),
                 trip_schedule_relationship=trip_relationship,
             )
 
@@ -465,7 +440,7 @@ class ZTMRealtimeDelays:
             return None
 
         return snapshot.trips.get((trip_id, service_date))
-    
+
     def get_all_trip_updates(self) -> list[RealtimeTripUpdate]:
         snapshot = self.snapshot
 
@@ -499,11 +474,7 @@ class ZTMRealtimeDelays:
         if snapshot is None:
             return []
 
-        return [
-            trip
-            for trip in snapshot.trips.values()
-            if trip.route_id == route_id
-        ]
+        return [trip for trip in snapshot.trips.values() if trip.route_id == route_id]
 
     def get_stop_update(
         self,
@@ -526,7 +497,6 @@ class ZTMRealtimeDelays:
             ),
             None,
         )
-
 
     # -----------------------------------------------------------------------
     # Background refresh
@@ -551,9 +521,7 @@ class ZTMRealtimeDelays:
                 try:
                     self.refresh()
                 except Exception:
-                    logger.exception(
-                        "Realtime refresh failed; keeping previous snapshot"
-                    )
+                    logger.exception("Realtime refresh failed; keeping previous snapshot")
 
                 self._stop_event.wait(timeout=interval_seconds)
 
