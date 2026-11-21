@@ -210,6 +210,37 @@ class StopMatch:
     score: float  # 1.0 = exact normalized match, lower = weaker match
 
 
+@dataclass(frozen=True, slots=True)
+class ServiceConnectionTemplate:
+    """Date-independent consecutive-stop connection template using integer
+    seconds since service-day midnight so calendar days sharing the exact
+    same set of active services reuse a single sorted tuple."""
+
+    trip_id: str
+    route_id: str
+    departure_stop_id: str
+    arrival_stop_id: str
+    departure_secs: int
+    arrival_secs: int
+    departure_sequence: int
+    pickup_type: int
+    drop_off_type: int
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledConnection:
+    trip_id: str
+    route_id: str
+    service_day: date
+    departure_stop_id: str
+    arrival_stop_id: str
+    departure_time: datetime
+    arrival_time: datetime
+    departure_sequence: int
+    pickup_type: int
+    drop_off_type: int
+
+
 @dataclass(slots=True)
 class PrecomputedData:
     feed_info: FeedInfo | None = None
@@ -224,6 +255,10 @@ class PrecomputedData:
     routes_by_stop: dict[str, set[str]] = field(default_factory=dict)
     stops_by_route: dict[str, dict[int, list[str]]] = field(default_factory=dict)
     normalized_names: dict[str, list[str]] = field(default_factory=dict)
+    connections_by_service_day: dict[date, tuple[ServiceConnectionTemplate, ...]] = field(
+        default_factory=dict
+    )
+    connection_index_lookback_days: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +325,7 @@ class ZTMStaticSchedule:
 
         storage._build_departure_index(data)
         storage._build_route_stop_indexes(data)
+        storage._build_connection_index(data)
 
         storage.data = data
         logger.debug("GTFS data loaded into schedule storage")
@@ -458,6 +494,116 @@ class ZTMStaticSchedule:
             most_common_pattern, _ = counter.most_common(1)[0]
 
             data.stops_by_route.setdefault(route_id, {})[direction_id] = list(most_common_pattern)
+
+    def _build_connection_index(self, data: PrecomputedData) -> None:
+        """
+        Build sorted connection templates deduplicated by active service set.
+
+        Each unique combination of active service_ids in the feed is built
+        and sorted once as integer-offset templates, then shared across all
+        calendar dates that run that exact service set.
+        """
+        max_departure_secs = max(
+            (
+                stop_time.departure_secs
+                for stop_times in data.stop_times_by_trip.values()
+                for stop_time in stop_times[:-1]
+            ),
+            default=0,
+        )
+
+        lookback_days = max_departure_secs // 86400
+        data.connection_index_lookback_days = lookback_days
+
+        # Determine the date range using the same rules as available_date_range.
+        if data.feed_info is not None:
+            start_date = data.feed_info.start_date
+            end_date = data.feed_info.end_date
+        else:
+            service_dates: list[date] = []
+
+            for service in data.services.values():
+                if (service.start_date, service.end_date) != (date.min, date.max):
+                    service_dates.extend((service.start_date, service.end_date))
+
+                service_dates.extend(service.added_dates)
+
+            if not service_dates:
+                logger.debug("No service dates; connection index is empty")
+                return
+
+            start_date = min(service_dates)
+            end_date = max(service_dates)
+
+        try:
+            day = start_date - timedelta(days=lookback_days)
+        except OverflowError:
+            day = date.min
+
+        # Pre-build date-independent connection templates grouped by service_id once.
+        templates_by_service: dict[str, list[ServiceConnectionTemplate]] = {}
+
+        for trip_id, stop_times in data.stop_times_by_trip.items():
+            trip = data.trips_by_id.get(trip_id)
+            if trip is None or len(stop_times) < 2:
+                continue
+
+            service_templates = templates_by_service.setdefault(trip.service_id, [])
+            for departure, arrival in zip(stop_times, stop_times[1:], strict=False):
+                service_templates.append(
+                    ServiceConnectionTemplate(
+                        trip_id=trip.trip_id,
+                        route_id=trip.route_id,
+                        departure_stop_id=departure.stop_id,
+                        arrival_stop_id=arrival.stop_id,
+                        departure_secs=departure.departure_secs,
+                        arrival_secs=arrival.arrival_secs,
+                        departure_sequence=departure.stop_sequence,
+                        pickup_type=departure.pickup_type,
+                        drop_off_type=arrival.drop_off_type,
+                    )
+                )
+
+        # Deduplicate across calendar days by active service set.
+        templates_by_service_set: dict[frozenset[str], tuple[ServiceConnectionTemplate, ...]] = {}
+
+        while day <= end_date:
+            active_services = frozenset(
+                service_id
+                for service_id, service in data.services.items()
+                if service.runs_on(day) and service_id in templates_by_service
+            )
+
+            if active_services:
+                shared_connections = templates_by_service_set.get(active_services)
+                if shared_connections is None:
+                    merged: list[ServiceConnectionTemplate] = []
+                    for service_id in active_services:
+                        merged.extend(templates_by_service[service_id])
+
+                    merged.sort(
+                        key=lambda connection: (
+                            connection.departure_secs,
+                            connection.arrival_secs,
+                            connection.trip_id,
+                            connection.departure_sequence,
+                        )
+                    )
+                    shared_connections = tuple(merged)
+                    templates_by_service_set[active_services] = shared_connections
+
+                data.connections_by_service_day[day] = shared_connections
+
+            day += timedelta(days=1)
+
+        logger.debug(
+            "Built connection index: %d service days, %d unique service sets, "
+            "%d template connections, %d lookback days",
+            len(data.connections_by_service_day),
+            len(templates_by_service_set),
+            sum(len(items) for items in templates_by_service_set.values()),
+            lookback_days,
+        )
 
     # -- id-based getters ----------------------------------------------------
     # These are the primary entry points for an MCP tool: GTFS is a relational
