@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from types import MappingProxyType
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
@@ -71,14 +72,17 @@ class RealtimeTripUpdate:
     vehicle_id: str | None = None
 
 
+_EMPTY_MAPPING: Mapping[Any, Any] = MappingProxyType({})
+
+
 @dataclass(frozen=True, slots=True)
 class RealtimeSnapshot:
     fetched_at: datetime
     feed_timestamp: datetime | None
     trips: Mapping[tuple[str, date], RealtimeTripUpdate]
-    vehicles_by_trip: Mapping[tuple[str, date], str] = MappingProxyType({})
-    vehicles_by_trip_id: Mapping[str, str] = MappingProxyType({})
-    vehicles_by_base_trip_id: Mapping[str, str] = MappingProxyType({})
+    vehicles_by_trip: Mapping[tuple[str, date], str] = field(default_factory=lambda: _EMPTY_MAPPING)
+    vehicles_by_trip_id: Mapping[str, str] = field(default_factory=lambda: _EMPTY_MAPPING)
+    vehicles_by_base_trip_id: Mapping[str, str] = field(default_factory=lambda: _EMPTY_MAPPING)
 
 
 # ---------------------------------------------------------------------------
