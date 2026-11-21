@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import copy
 from datetime import date, datetime, timedelta
 
 import pytest
-import copy
 from google.transit import gtfs_realtime_pb2
 
 from services.ztm_realtime_delays import (

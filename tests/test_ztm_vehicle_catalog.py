@@ -189,9 +189,7 @@ def test_replace_updates_catalog_in_place():
     catalog = ZTMVehicleCatalog.from_csv_text(SAMPLE_CATALOG_CSV)
     original_ref = catalog
 
-    updated = ZTMVehicleCatalog.from_csv_text(
-        "vehicle,hf_lf_le,ramp,air_conditioner\n4001,1,1,1\n"
-    )
+    updated = ZTMVehicleCatalog.from_csv_text("vehicle,hf_lf_le,ramp,air_conditioner\n4001,1,1,1\n")
     catalog.replace(updated)
 
     assert catalog is original_ref

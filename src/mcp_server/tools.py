@@ -26,7 +26,7 @@ from services.ztm_connection_search import (
 from services.ztm_realtime_delays import ZTMRealtimeDelays
 from services.ztm_schedule_repository import ScheduleRepository, warsaw_today
 from services.ztm_static_schedule import ZTMStaticSchedule
-from services.ztm_vehicle_catalog import VehicleMetadata, ZTMVehicleCatalog
+from services.ztm_vehicle_catalog import ZTMVehicleCatalog
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 
@@ -65,7 +65,7 @@ def _get_schedule(ctx: Context, day: calendar_date) -> ZTMStaticSchedule:
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
 
-    
+
 def _get_vehicle_catalog(ctx: Context) -> ZTMVehicleCatalog | None:
     request_context = ctx.request_context
     if request_context is None:
@@ -234,8 +234,6 @@ def _enrich_departure_with_realtime(
         result["realtime_departure_datetime"] = stop_update.predicted_departure.isoformat()
 
     return result
-
-
 
 
 @mcp_tools.tool()

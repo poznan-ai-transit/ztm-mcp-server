@@ -21,10 +21,10 @@ class VehicleMetadata:
     """Static accessibility and equipment metadata for a single ZTM vehicle."""
 
     vehicle_id: str
-    floor_type: str | None          # e.g. "LF" (low-floor), "LE" (low-entry), "HF" (high-floor)
+    floor_type: str | None  # e.g. "LF" (low-floor), "LE" (low-entry), "HF" (high-floor)
     has_ramp: bool | None
     has_air_conditioner: bool | None
-    raw: dict[str, str]             # preserves any extra ZTM columns for future tools
+    raw: dict[str, str]  # preserves any extra ZTM columns for future tools
 
     @property
     def is_low_floor(self) -> bool | None:
