@@ -18,6 +18,7 @@ from ini import ini
 from logging_config import logger
 from services.ztm_schedule_repository import WARSAW, ScheduleEntry, ScheduleRepository, warsaw_today
 from services.ztm_static_schedule import ZTMStaticSchedule
+from services.ztm_vehicle_catalog import VehicleMetadata, ZTMVehicleCatalog
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +102,7 @@ class ZTMService:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self.repository = ScheduleRepository()
+        self.vehicle_catalog = ZTMVehicleCatalog()
         self._initialized = True
 
     def start_daily_refresh(self) -> None:
@@ -186,6 +188,14 @@ class ZTMService:
             candidate.for_date(day)
             day += timedelta(days=1)
         self.repository.replace(candidate.list_schedules())
+
+        try:
+            catalog = self.fetch_vehicle_catalog()
+            self.vehicle_catalog.replace(catalog)
+            logger.info("Loaded %d vehicles into accessibility catalog", len(catalog))
+        except Exception:
+            logger.exception("Failed to refresh vehicle catalog; keeping previous catalog")
+
         logger.info("Published %d independent GTFS schedules", len(entries))
 
     def get_static_gtfs(self, filename: str | None = None) -> dict[str, Any]:
@@ -253,3 +263,16 @@ class ZTMService:
             return zipfile.ZipFile(zip_path)
         except FileNotFoundError as exc:
             raise MissingGTFSArchiveError(zip_path) from exc
+
+    def fetch_vehicle_catalog(self) -> ZTMVehicleCatalog:
+        resp = requests.get(
+            ini.gtfs_rt_endpoint,
+            params={"file": "vehicle_dictionary.csv"},
+            timeout=ini.request_timeout_seconds,
+        )
+        resp.raise_for_status()
+        resp.encoding = "utf-8-sig"
+        return ZTMVehicleCatalog.from_csv_text(resp.text)
+
+    def get_vehicle_metadata(self, vehicle_id: str | None) -> VehicleMetadata | None:
+        return self.vehicle_catalog.get(vehicle_id)

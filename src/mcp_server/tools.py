@@ -26,6 +26,7 @@ from services.ztm_connection_search import (
 from services.ztm_realtime_delays import ZTMRealtimeDelays
 from services.ztm_schedule_repository import ScheduleRepository, warsaw_today
 from services.ztm_static_schedule import ZTMStaticSchedule
+from services.ztm_vehicle_catalog import VehicleMetadata, ZTMVehicleCatalog
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
 
@@ -63,6 +64,13 @@ def _get_schedule(ctx: Context, day: calendar_date) -> ZTMStaticSchedule:
         return repository.for_date(day)
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
+
+    
+def _get_vehicle_catalog(ctx: Context) -> ZTMVehicleCatalog | None:
+    request_context = ctx.request_context
+    if request_context is None:
+        return None
+    return request_context.lifespan_context.get("ztm_vehicle_catalog")
 
 
 @mcp_tools.tool()
@@ -157,6 +165,7 @@ def _enrich_departure_with_realtime(
     departure: ScheduledDeparture,
     realtime_service: ZTMRealtimeDelays | None,
     service_day: calendar_date,
+    vehicle_catalog: ZTMVehicleCatalog | None = None,
 ) -> ScheduledDeparture:
     """Enrich one scheduled departure without changing its scheduled fields."""
 
@@ -167,14 +176,32 @@ def _enrich_departure_with_realtime(
         "realtime_departure_datetime": None,
         "realtime_status": None,
         "cancelled": False,
+        "vehicle_id": None,
+        "accessibility": None,
     }
 
     if realtime_service is None:
         return result
 
+    vehicle_id = realtime_service.get_vehicle_id(departure["trip_id"], service_day)
+    if vehicle_id:
+        result["vehicle_id"] = vehicle_id
+        if vehicle_catalog is not None:
+            meta = vehicle_catalog.get(vehicle_id)
+            if meta is not None:
+                result["accessibility"] = meta.to_dict()
+
     trip_update = realtime_service.get_trip_updates(
         departure["trip_id"],
         service_day,
+    )
+
+    logger.info(
+        "RT lookup trip_id=%r day=%s -> vehicle_id=%r (total active vehicles=%d)",
+        departure["trip_id"],
+        service_day,
+        vehicle_id,
+        len(realtime_service.snapshot.vehicles_by_trip) if realtime_service.snapshot else 0,
     )
 
     if trip_update is None:
@@ -182,7 +209,6 @@ def _enrich_departure_with_realtime(
 
     result["realtime"] = True
 
-    # A cancelled trip may not contain any stop-level updates.
     if trip_update.trip_schedule_relationship == "CANCELED":
         result["cancelled"] = True
         result["realtime_status"] = "CANCELED"
@@ -208,6 +234,8 @@ def _enrich_departure_with_realtime(
         result["realtime_departure_datetime"] = stop_update.predicted_departure.isoformat()
 
     return result
+
+
 
 
 @mcp_tools.tool()
@@ -284,12 +312,15 @@ def get_departures(
     if request_context is not None:
         realtime_service = request_context.lifespan_context.get("ztm_realtime_delays")
 
+    vehicle_catalog = _get_vehicle_catalog(ctx)
+
     # Enrich the scheduled departures.
     enriched_departures = [
         _enrich_departure_with_realtime(
             departure=departure,
             realtime_service=realtime_service,
             service_day=day,
+            vehicle_catalog=vehicle_catalog,
         )
         for departure in departures
     ]
