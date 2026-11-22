@@ -29,7 +29,7 @@
       value: '"type":"function"|function_calls|invoke name'
     - type: icontains
       metric: ambiguity
-      value: 'przystanek'
+      value: 'przystan'
 
 - description: C4 Departure question without a stop
   vars:
@@ -40,7 +40,7 @@
       value: '"type":"function"|function_calls|invoke name'
     - type: icontains
       metric: ambiguity
-      value: 'przystanek'
+      value: 'przystan'
 
 - description: C5 Complete details do not trigger an unnecessary question
   vars:

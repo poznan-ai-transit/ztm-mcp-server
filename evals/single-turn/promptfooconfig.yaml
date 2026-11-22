@@ -1,7 +1,7 @@
-# Running (from src/tests):
-#   npx promptfoo eval --no-cache -o results.json
-#   npx promptfoo eval --no-cache --repeat 5 -o results.json
-#   node failures.js results.json
+# Single-turn suite: checks only the model's first response (built-in promptfoo MCP support).
+# Running (from evals/):
+#   npm run eval:single         # or: npm run eval:single:repeat
+#   npm run report:single
 #
 
 providers:
@@ -19,7 +19,7 @@ providers:
         enabled: true
         server:
           url: http://localhost:8000/mcp
-  - id: openrouter:meta-llama/llama-3.1-8b-instruct
+  - id: openrouter:openai/gpt-4o-mini   # same model as the Streamlit demo
     config:
       apiKey: '{{env.OPENROUTER_API_KEY}}'
       mcp:

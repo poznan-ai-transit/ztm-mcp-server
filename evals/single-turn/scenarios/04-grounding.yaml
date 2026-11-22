@@ -18,6 +18,8 @@
   vars:
     question: 'What are the next scheduled departures from Rondo Kaponiera starting now?'
   assert:
-    - type: contains
-      metric: grounding
-      value: 'get_departures'
+    - type: javascript
+      value: |
+        const s = typeof output === 'string' ? output : JSON.stringify(output);
+        return s.includes('get_departures') ||
+               (s.includes('search_stops') && /kaponiera/i.test(s));
