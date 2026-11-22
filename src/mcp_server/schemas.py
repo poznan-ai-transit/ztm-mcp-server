@@ -16,7 +16,7 @@ StopId = Annotated[
             "Exact GTFS stop_id returned by search_stops. Pass unchanged as a JSON string, "
             "preserving leading zeros. Do not pass a stop name, stop_code, or stop_sequence. "
             "Reuse a previously resolved ID when applicable; never invent one. "
-            "Resolve ambiguous search matches with the user before selecting an ID."
+            "Clarify only genuinely different places by name."
         ),
     ),
 ]
@@ -85,6 +85,12 @@ class ScheduledDeparture(TypedDict):
     direction_id: int
     stop_sequence: int
 
+    realtime: bool
+    departure_delay: int | None
+    realtime_departure_datetime: str | None
+    realtime_status: str | None
+    cancelled: bool
+
 
 class DeparturesResponse(TypedDict):
     """Scheduled departures and the query context"""
@@ -99,5 +105,5 @@ class DeparturesResponse(TypedDict):
         Field(description="Inclusive Europe/Warsaw start time, HH:MM from 00:00 through 23:59."),
     ]
     direction_id: Literal[0, 1] | None
-    realtime: Literal[False]
+    realtime: bool
     departures: list[ScheduledDeparture]

@@ -10,34 +10,33 @@ import pytest
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 
-def test_instance_returns_same_object():
-    assert ZTMStaticSchedule.instance() is ZTMStaticSchedule.instance()
-
-
-def test_constructor_and_instance_share_singleton():
-    assert ZTMStaticSchedule() is ZTMStaticSchedule.instance()
+def test_constructor_creates_independent_schedules():
+    first = ZTMStaticSchedule()
+    second = ZTMStaticSchedule()
+    assert first is not second
+    assert first.data is not second.data
 
 
 def _loaded(sample_gtfs) -> ZTMStaticSchedule:
     return ZTMStaticSchedule.load(sample_gtfs)
 
 
-def test_load_returns_singleton_and_builds_indexes(sample_gtfs):
+def test_load_builds_indexes(sample_gtfs):
     schedule = _loaded(sample_gtfs)
-    assert schedule is ZTMStaticSchedule.instance()
     assert [stop.stop_id for stop in schedule.get_all_stops()] == ["S1", "S2", "S3"]
     assert [route.route_id for route in schedule.get_all_routes()] == ["R1", "R2"]
     assert schedule.feed_info is not None
     assert schedule.feed_info.publisher_name == "ZTM Poznań"
 
 
-def test_available_date_range_uses_feed_metadata_and_updates_on_reload(sample_gtfs):
+def test_available_date_range_uses_feed_metadata_without_changing_previous_feed(sample_gtfs):
     schedule = _loaded(sample_gtfs)
     assert schedule.available_date_range == (date(2026, 6, 1), date(2026, 6, 30))
 
     sample_gtfs["feed_info"][0].update(feed_start_date="20260610", feed_end_date="20260620")
-    ZTMStaticSchedule.load(sample_gtfs)
-    assert schedule.available_date_range == (date(2026, 6, 10), date(2026, 6, 20))
+    reloaded = ZTMStaticSchedule.load(sample_gtfs)
+    assert reloaded.available_date_range == (date(2026, 6, 10), date(2026, 6, 20))
+    assert schedule.available_date_range == (date(2026, 6, 1), date(2026, 6, 30))
 
 
 def test_available_date_range_falls_back_to_calendar_and_added_exceptions(sample_gtfs):
@@ -71,14 +70,13 @@ def test_validate_date_range_rejects_outside_or_reversed_ranges(sample_gtfs, sta
 
 
 def test_validate_date_range_rejects_unavailable_schedule():
-    schedule = ZTMStaticSchedule.instance()
+    schedule = ZTMStaticSchedule()
     with pytest.raises(ValueError, match="no available date range"):
         schedule.validate_date_range(date(2026, 6, 15))
 
 
-def test_load_keeps_singleton_identity_while_replacing_data(sample_gtfs):
+def test_load_keeps_existing_feed_and_builds_independent_indexes(sample_gtfs):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
-    same_instance = ZTMStaticSchedule.instance()
 
     alt_gtfs = {
         **sample_gtfs,
@@ -105,14 +103,15 @@ def test_load_keeps_singleton_identity_while_replacing_data(sample_gtfs):
 
     reloaded = ZTMStaticSchedule.load(alt_gtfs)
 
-    assert schedule is same_instance is reloaded
+    assert schedule is not reloaded
+    assert [stop.stop_id for stop in schedule.get_all_stops()] == ["S1", "S2", "S3"]
+    assert [route.route_id for route in schedule.get_all_routes()] == ["R1", "R2"]
     assert [stop.stop_id for stop in reloaded.get_all_stops()] == ["X1", "X2"]
     assert [route.route_id for route in reloaded.get_all_routes()] == ["RX"]
     assert [time.stop_id for time in reloaded.get_stop_times_for_trip("TX")] == ["X1", "X2"]
 
 
-def test_concurrent_loads_leave_consistent_state(sample_gtfs):
-    schedule = ZTMStaticSchedule.instance()
+def test_concurrent_loads_produce_independent_consistent_feeds(sample_gtfs):
     feed_a = sample_gtfs
     feed_b = {
         **sample_gtfs,
@@ -138,11 +137,12 @@ def test_concurrent_loads_leave_consistent_state(sample_gtfs):
     }
 
     start = threading.Barrier(3)
+    loaded = []
 
     def loader(feed: dict) -> None:
         start.wait()
         for _ in range(20):
-            ZTMStaticSchedule.load(feed)
+            loaded.append(ZTMStaticSchedule.load(feed))
 
     threads = [threading.Thread(target=loader, args=(feed,)) for feed in (feed_a, feed_b)]
     for thread in threads:
@@ -151,17 +151,19 @@ def test_concurrent_loads_leave_consistent_state(sample_gtfs):
     for thread in threads:
         thread.join()
 
-    final_stop_ids = {stop.stop_id for stop in schedule.get_all_stops()}
-    final_route_ids = {route.route_id for route in schedule.get_all_routes()}
-
-    assert (final_stop_ids, final_route_ids) in [
-        ({"S1", "S2", "S3"}, {"R1", "R2"}),
-        ({"Y1", "Y2"}, {"RB"}),
-    ]
+    assert len(loaded) == 40
+    assert len({id(schedule) for schedule in loaded}) == 40
+    for schedule in loaded:
+        stop_ids = {stop.stop_id for stop in schedule.get_all_stops()}
+        route_ids = {route.route_id for route in schedule.get_all_routes()}
+        assert (stop_ids, route_ids) in [
+            ({"S1", "S2", "S3"}, {"R1", "R2"}),
+            ({"Y1", "Y2"}, {"RB"}),
+        ]
 
 
 def test_empty_collection_getters_return_empty_lists():
-    schedule = ZTMStaticSchedule.instance()
+    schedule = ZTMStaticSchedule()
     assert schedule.get_all_stops() == []
     assert schedule.get_all_routes() == []
     assert schedule.get_stop("nope") is None

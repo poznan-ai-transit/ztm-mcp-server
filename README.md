@@ -33,6 +33,22 @@ npx @modelcontextprotocol/inspector
 
 Stateless HTTP is enabled to avoid missing session ID errors.
 
+## Docker
+
+```bash
+docker compose up --build -d  # start
+docker compose down          # stop
+docker compose logs mcp      # HTTP logs
+docker compose exec mcp tail -n 50 /app/_logs_/server.log
+```
+
+External access (`.env`):
+
+```dotenv
+BIND_ADDRESS=0.0.0.0
+PORT=8000
+```
+
 ## Demo running
 
 ```bash
@@ -61,6 +77,13 @@ python examples/05_vehicle_dictionary.py
 ```
 
 ## API overview
+
+Routes and stops are available at the MCP resource
+`resource://ztm_static_storage/list_routes_and_stops/{date}`. The date is required in
+`YYYY-MM-DD` format, for example `2026-06-15`.
+
+The resource returns all routes and stops in the selected feed, including those without
+service on the selected day. Dates outside loaded feed coverage return an error.
 
 | Feed | Format | File |
 |---|---|---|

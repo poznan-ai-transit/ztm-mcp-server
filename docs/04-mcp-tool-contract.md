@@ -13,12 +13,12 @@ MCP transport wrappers. The server supplies `ctx`; never include it in arguments
 | [`search_routes`](#search_routes) | Find route IDs by line number, name, or ID. |
 | [`get_routes_for_stop`](#get_routes_for_stop) | List routes serving a stop. |
 | [`get_departures`](#get_departures) | Get scheduled departures for a stop, route, and service day. |
-| [`echo`](#echo) | Return text for diagnostics. |
 
 ## Shared rules
 
 - Obtain required details from the conversation. Ask one concise question for
-  missing details and wait; clarify ambiguous search matches before selecting IDs.
+  missing details and wait; clarify genuinely different places by name, never IDs or codes.
+- For line lists, query every returned same-name platform and deduplicate routes.
 - Resolve `stop_id` with `search_stops` and `route_id` with `search_routes`.
   Reuse resolved IDs when applicable; never invent them.
 - Pass IDs unchanged as JSON strings, preserving leading zeros. A `stop_id` is
@@ -129,11 +129,6 @@ outside the loaded dataset's supported range are rejected.
 An empty `departures` array retains all response metadata and means no matching
 service at or after `time`: the route may not serve the stop, date, or direction.
 Unknown IDs are errors. Static results never imply zero delay or live status.
-
-## `echo`
-
-Required input `text` (string); returns the same string, including empty text
-and Polish characters.
 
 ## Errors
 

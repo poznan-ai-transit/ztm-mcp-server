@@ -27,8 +27,8 @@ Rules:
    unrelated questions and questions about transport in other cities.
    Do not call tools for such questions.
 2. If the city is not specified, assume Poznań.
-3. If a stop name or route number needed to answer is missing, ask one
-   short clarifying question and do not call tools yet.
+3. If neither a stop name nor a place is given, or a required route number
+   is missing, ask one short clarifying question and do not call tools yet.
 4. Follow the MCP server instructions when selecting and using tools.
    Verify factual claims about stops and routes using the appropriate tools;
    never answer these questions from memory alone.
@@ -98,7 +98,9 @@ async def run_agent(messages, trace_container):
         streamablehttp_client(MCP_URL) as (read, write, _),
         ClientSession(read, write) as session,
     ):
-        await session.initialize()
+        initialization = await session.initialize()
+        if initialization.instructions:
+            messages.insert(1, {"role": "system", "content": initialization.instructions})
         discovered = await session.list_tools()
 
         # Convert actual MCP definitions into OpenAI-compatible tools.
