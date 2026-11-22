@@ -1,6 +1,6 @@
 # Mode 2: hard cases (nonexistent stop, missing details, out-of-range date).
 # Test data: see the header of 01-chains.yaml.
-# M7 (bare stop name, all same-name platforms) is removed until stop groups land (#60-#61).
+# Scenarios with a bare stop name (all same-name platforms) are to be added once stop groups land (#60-#61).
 
 - description: M4 Nonexistent stop - no departures call, no invented data
   metadata: { mode: 2 }
@@ -43,7 +43,7 @@
     - type: javascript
       value: file://../lib/assertions.js:noInventedTimes
 
-- description: M8 Missing date and time - asks instead of calling get_departures
+- description: M7 Missing date and time - asks instead of calling get_departures
   metadata: { mode: 2 }
   vars:
     question: 'Show departures of line 15 from stop Rondo Kaponiera, platform RKAP72.'
@@ -53,7 +53,7 @@
     - type: llm-rubric
       value: The agent asks for the missing date and/or time and does not invent departure times.
 
-- description: M9 Date outside the dataset - reports the error honestly
+- description: M8 Date outside the dataset - reports the error honestly
   metadata: { mode: 2 }
   vars:
     question: 'Show departures of line 15 from stop Rondo Kaponiera, platform RKAP72, on 2026-12-24 at 12:00.'
