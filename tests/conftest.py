@@ -6,6 +6,9 @@ a singleton; reset it around each test to isolate its repository and worker.
 
 from __future__ import annotations
 
+import copy
+import gc
+
 import pytest
 
 from services.ztm_service import ZTMService
@@ -20,6 +23,7 @@ def fresh_service():
     if ZTMService._instance is not None:
         ZTMService._instance.stop_daily_refresh()
     ZTMService._instance = None
+    gc.unfreeze()
 
 
 @pytest.fixture(scope="session")
@@ -229,3 +233,150 @@ def search_service(sample_schedule):
     )
 
     return ZTMConnectionSearchService(schedule=sample_schedule)
+
+
+@pytest.fixture
+def multi_transfer_gtfs(sample_gtfs) -> dict:
+    """Extends ``sample_gtfs`` with:
+    - S4 + Route R3 + Trip T4 (S3 06:25 -> S4 06:35) for 2-transfer journeys
+    - Trip T_SLOW (S1 05:35 -> S3 06:45) for Pareto / target-cutoff tests
+    - Trip T_NO_DROP (S1 05:38 -> S2 [drop_off=1] -> S3 06:30) for drop_off_type=1 tests
+    """
+    gtfs = copy.deepcopy(sample_gtfs)
+
+    gtfs["stops"].append(
+        {
+            "stop_id": "S4",
+            "stop_code": "004",
+            "stop_name": "Pętla",
+            "stop_lat": "52.43",
+            "stop_lon": "16.96",
+            "zone_id": "B",
+        }
+    )
+    gtfs["routes"].append(
+        {
+            "route_id": "R3",
+            "agency_id": "1",
+            "route_short_name": "3",
+            "route_long_name": "Pętla",
+            "route_type": "3",
+        }
+    )
+    gtfs["trips"].extend(
+        [
+            {
+                "trip_id": "T4",
+                "route_id": "R3",
+                "service_id": "WKD",
+                "trip_headsign": "Pętla",
+                "direction_id": "0",
+                "brigade": "",
+            },
+            {
+                "trip_id": "T_SLOW",
+                "route_id": "R1",
+                "service_id": "WKD",
+                "trip_headsign": "Dworzec",
+                "direction_id": "0",
+                "brigade": "",
+            },
+            {
+                "trip_id": "T_NO_DROP",
+                "route_id": "R1",
+                "service_id": "WKD",
+                "trip_headsign": "Dworzec",
+                "direction_id": "0",
+                "brigade": "",
+            },
+        ]
+    )
+    gtfs["stop_times"].extend(
+        [
+            {
+                "trip_id": "T4",
+                "stop_id": "S3",
+                "arrival_time": "06:25:00",
+                "departure_time": "06:25:00",
+                "stop_sequence": "0",
+                "stop_headsign": "Pętla",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+            {
+                "trip_id": "T4",
+                "stop_id": "S4",
+                "arrival_time": "06:35:00",
+                "departure_time": "06:35:00",
+                "stop_sequence": "1",
+                "stop_headsign": "Pętla",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+            {
+                "trip_id": "T_SLOW",
+                "stop_id": "S1",
+                "arrival_time": "05:35:00",
+                "departure_time": "05:35:00",
+                "stop_sequence": "0",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+            {
+                "trip_id": "T_SLOW",
+                "stop_id": "S3",
+                "arrival_time": "06:45:00",
+                "departure_time": "06:45:00",
+                "stop_sequence": "1",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+            {
+                "trip_id": "T_NO_DROP",
+                "stop_id": "S1",
+                "arrival_time": "05:38:00",
+                "departure_time": "05:38:00",
+                "stop_sequence": "0",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+            {
+                "trip_id": "T_NO_DROP",
+                "stop_id": "S2",
+                "arrival_time": "05:43:00",
+                "departure_time": "05:43:00",
+                "stop_sequence": "1",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "1",
+            },
+            {
+                "trip_id": "T_NO_DROP",
+                "stop_id": "S3",
+                "arrival_time": "06:30:00",
+                "departure_time": "06:30:00",
+                "stop_sequence": "2",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+        ]
+    )
+    return gtfs
+
+
+@pytest.fixture
+def multi_transfer_schedule(multi_transfer_gtfs):
+    return ZTMStaticSchedule.load(multi_transfer_gtfs)
+
+
+@pytest.fixture
+def multi_transfer_search_service(multi_transfer_schedule):
+    from services.ztm_connection_search import (
+        ZTMConnectionSearchService,
+    )
+
+    return ZTMConnectionSearchService(schedule=multi_transfer_schedule)

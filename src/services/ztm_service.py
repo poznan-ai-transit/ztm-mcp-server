@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gc
 import io
 import re
 import threading
@@ -195,6 +196,12 @@ class ZTMService:
             logger.info("Loaded %d vehicles into accessibility catalog", len(catalog))
         except Exception:
             logger.exception("Failed to refresh vehicle catalog; keeping previous catalog")
+        # Unfreeze any retired schedules from a prior refresh, sweep temporary
+        # parsing garbage, and freeze the active static schedules so Gen-2 GC
+        # never scans millions of immutable GTFS objects during searches.
+        gc.unfreeze()
+        gc.collect()
+        gc.freeze()
 
         logger.info("Published %d independent GTFS schedules", len(entries))
 
