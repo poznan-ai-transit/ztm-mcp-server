@@ -227,20 +227,6 @@ class ServiceConnectionTemplate:
     drop_off_type: int
 
 
-@dataclass(frozen=True, slots=True)
-class ScheduledConnection:
-    trip_id: str
-    route_id: str
-    service_day: date
-    departure_stop_id: str
-    arrival_stop_id: str
-    departure_time: datetime
-    arrival_time: datetime
-    departure_sequence: int
-    pickup_type: int
-    drop_off_type: int
-
-
 @dataclass(slots=True)
 class PrecomputedData:
     feed_info: FeedInfo | None = None
@@ -277,20 +263,22 @@ class ZTMStaticSchedule:
         """Feed publisher metadata, or None if feed_info.txt was absent."""
         return self.data.feed_info
 
-    @property
-    def available_date_range(self) -> tuple[date, date] | None:
-        """Published feed bounds, falling back to service calendars and added dates."""
-        data = self.data
+    @staticmethod
+    def _date_range_for(data: PrecomputedData) -> tuple[date, date] | None:
         if data.feed_info is not None:
             return data.feed_info.start_date, data.feed_info.end_date
 
         dates: list[date] = []
         for service in data.services.values():
-            # Exception-only services use unbounded sentinel dates.
             if (service.start_date, service.end_date) != (date.min, date.max):
                 dates.extend((service.start_date, service.end_date))
             dates.extend(service.added_dates)
         return (min(dates), max(dates)) if dates else None
+
+    @property
+    def available_date_range(self) -> tuple[date, date] | None:
+        """Published feed bounds, falling back to service calendars and added dates."""
+        return self._date_range_for(self.data)
 
     def validate_date_range(self, start_date: date, end_date: date | None = None) -> None:
         """Require a single date or an ordered, inclusive range within the loaded feed."""
@@ -520,20 +508,11 @@ class ZTMStaticSchedule:
             start_date = data.feed_info.start_date
             end_date = data.feed_info.end_date
         else:
-            service_dates: list[date] = []
-
-            for service in data.services.values():
-                if (service.start_date, service.end_date) != (date.min, date.max):
-                    service_dates.extend((service.start_date, service.end_date))
-
-                service_dates.extend(service.added_dates)
-
-            if not service_dates:
+            date_range = self._date_range_for(data)
+            if date_range is None:
                 logger.debug("No service dates; connection index is empty")
                 return
-
-            start_date = min(service_dates)
-            end_date = max(service_dates)
+            start_date, end_date = date_range
 
         try:
             day = start_date - timedelta(days=lookback_days)

@@ -64,9 +64,7 @@ class _Label:
 
     stop_id: str
     arrival_secs: int
-    transfers: int
     last_trip_id: str | None
-    can_alight: bool
     previous: _Label | None = None
     service_day: date | None = None
     template: ServiceConnectionTemplate | None = None
@@ -148,16 +146,14 @@ class ZTMConnectionSearchService:
             request.from_stop_id: _Label(
                 stop_id=request.from_stop_id,
                 arrival_secs=0,
-                transfers=0,
                 last_trip_id=None,
-                can_alight=True,
             )
         }
 
         destination_labels: list[_Label] = []
         scan_cutoff_secs = horizon_secs
 
-        for transfer_round in range(request.max_transfers + 1):
+        for _transfer_round in range(request.max_transfers + 1):
             current_round: dict[str, _Label] = {}
 
             # Stores the latest position reached on each boarded trip instance.
@@ -205,9 +201,7 @@ class ZTMConnectionSearchService:
                 candidate = _Label(
                     stop_id=tpl.arrival_stop_id,
                     arrival_secs=arr_secs,
-                    transfers=transfer_round,
                     last_trip_id=trip_id,
-                    can_alight=can_alight,
                     previous=previous_label,
                     service_day=service_day,
                     template=tpl,
