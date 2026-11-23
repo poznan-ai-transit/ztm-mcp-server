@@ -241,3 +241,18 @@ def test_real_feed_loads_into_object_model(real_gtfs):
     schedule = ZTMStaticSchedule.load(real_gtfs)
     assert len(schedule.get_all_stops()) == len(real_gtfs["stops"])
     assert len(schedule.get_all_routes()) == len(real_gtfs["routes"])
+
+
+def test_connection_templates_are_deduplicated_across_identical_service_days(sample_gtfs):
+    sample_gtfs["calendar_dates"] = [
+        {"service_id": "WKD", "date": "20260603", "exception_type": "2"},
+    ]
+    schedule = _loaded(sample_gtfs)
+    by_day = schedule.data.connections_by_service_day
+
+    # Mon Jun 1 and Tue Jun 2 have identical active services -> same tuple instance
+    assert by_day[date(2026, 6, 1)] is by_day[date(2026, 6, 2)]
+    # Wed Jun 3 has WKD removed -> not present
+    assert date(2026, 6, 3) not in by_day
+    # Sat Jun 6 has no active services -> not present
+    assert date(2026, 6, 6) not in by_day

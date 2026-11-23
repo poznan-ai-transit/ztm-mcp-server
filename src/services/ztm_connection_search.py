@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, timedelta
+from heapq import merge
 
-from services.ztm_static_schedule import PrecomputedData, ZTMStaticSchedule
+from services.ztm_static_schedule import (
+    PrecomputedData,
+    ServiceConnectionTemplate,
+    ZTMStaticSchedule,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,32 +58,21 @@ class Connection:
     legs: tuple[ConnectionLeg, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class _ScheduledConnection:
-    trip_id: str
-    route_id: str
-    service_id: str
-    departure_stop_id: str
-    arrival_stop_id: str
-    departure_time: datetime
-    arrival_time: datetime
-    departure_sequence: int
-    arrival_sequence: int
-    pickup_type: int
-    drop_off_type: int
-
-
 @dataclass(eq=False, slots=True)
 class _Label:
-    """A reachable-stop label retained during the CSA scan."""
+    """A reachable-stop label retained during the CSA scan (integer-second timestamps)."""
 
     stop_id: str
-    arrival_time: datetime
-    transfers: int
+    arrival_secs: int
     last_trip_id: str | None
-    can_alight: bool
     previous: _Label | None = None
-    connection: _ScheduledConnection | None = None
+    service_day: date | None = None
+    template: ServiceConnectionTemplate | None = None
+
+
+# Flat tuple stored in the reusable scan array:
+# (dep_rel_secs, arr_rel_secs, service_day, template)
+_ScanSegment = tuple[int, int, date, ServiceConnectionTemplate]
 
 
 class ZTMConnectionSearchService:
@@ -132,112 +127,107 @@ class ZTMConnectionSearchService:
         if request.from_stop_id == request.to_stop_id:
             return []
 
-        horizon_end = request.departure_time + timedelta(seconds=self._search_horizon_seconds)
-
-        scheduled = self._build_connections(
-            data=data,
-            departure_time=request.departure_time,
-            horizon_end=horizon_end,
+        horizon_secs = self._search_horizon_seconds
+        scheduled = self._get_scan_segments(
+            data,
+            request.departure_time,
+            horizon_secs,
         )
 
         if not scheduled:
             return []
 
-        # Round-based CSA:
-        # round 0 = no transfers
-        # round 1 = at most one transfer
-        # round 2 = at most two transfers, etc.
+        min_transfer = self._minimum_transfer_seconds
+        to_stop_id = request.to_stop_id
 
+        # Round-based CSA operating purely on integer seconds relative to
+        # request.departure_time (0 == request.departure_time).
         previous_round: dict[str, _Label] = {
             request.from_stop_id: _Label(
                 stop_id=request.from_stop_id,
-                arrival_time=request.departure_time,
-                transfers=0,
+                arrival_secs=0,
                 last_trip_id=None,
-                can_alight=True,
             )
         }
 
         destination_labels: list[_Label] = []
+        scan_cutoff_secs = horizon_secs
 
-        for transfer_round in range(request.max_transfers + 1):
+        for _transfer_round in range(request.max_transfers + 1):
             current_round: dict[str, _Label] = {}
 
-            # Stores the latest position reached on each boarded trip.
-            onboard: dict[str, _Label] = {}
+            # Stores the latest position reached on each boarded trip instance.
+            onboard: dict[tuple[str, date], _Label] = {}
 
-            for connection in scheduled:
-                if connection.departure_time > horizon_end:
+            for dep_secs, arr_secs, service_day, tpl in scheduled:
+                if dep_secs > scan_cutoff_secs:
                     break
 
-                state = onboard.get(connection.trip_id)
+                trip_id = tpl.trip_id
+                trip_instance = (trip_id, service_day)
+                state = onboard.get(trip_instance)
 
                 if state is not None:
                     # Continue travelling on the same vehicle.
-                    if state.stop_id != connection.departure_stop_id:
+                    if state.stop_id != tpl.departure_stop_id:
                         continue
 
-                    if connection.departure_time < state.arrival_time:
+                    if dep_secs < state.arrival_secs:
                         continue
 
                     previous_label = state
-
                 else:
                     # Board a new trip using a label from the previous round.
-                    previous_label = previous_round.get(connection.departure_stop_id)
-
+                    previous_label = previous_round.get(tpl.departure_stop_id)
                     if previous_label is None:
                         continue
 
-                    if connection.pickup_type == 1:
+                    if tpl.pickup_type == 1:
                         continue
 
-                    transfer_seconds = (
-                        self._minimum_transfer_seconds
+                    earliest_boarding = (
+                        previous_label.arrival_secs + min_transfer
                         if previous_label.last_trip_id is not None
-                        else 0
+                        else previous_label.arrival_secs
                     )
 
-                    earliest_boarding = previous_label.arrival_time + timedelta(
-                        seconds=transfer_seconds
-                    )
-
-                    if connection.departure_time < earliest_boarding:
+                    if dep_secs < earliest_boarding:
                         continue
 
-                if connection.arrival_time > horizon_end:
+                if arr_secs > scan_cutoff_secs:
                     continue
 
+                can_alight = tpl.drop_off_type != 1
                 candidate = _Label(
-                    stop_id=connection.arrival_stop_id,
-                    arrival_time=connection.arrival_time,
-                    transfers=transfer_round,
-                    last_trip_id=connection.trip_id,
-                    can_alight=(connection.drop_off_type != 1),
+                    stop_id=tpl.arrival_stop_id,
+                    arrival_secs=arr_secs,
+                    last_trip_id=trip_id,
                     previous=previous_label,
-                    connection=connection,
+                    service_day=service_day,
+                    template=tpl,
                 )
 
                 # Remember the passenger's position on this trip,
                 # even when alighting is prohibited at this stop.
-                onboard[connection.trip_id] = candidate
+                onboard[trip_instance] = candidate
 
-                if not candidate.can_alight:
+                if not can_alight:
                     continue
 
                 existing = current_round.get(candidate.stop_id)
-
-                # For the same transfer round, an earlier arrival
-                # dominates a later arrival at the same stop.
-                if existing is None or candidate.arrival_time < existing.arrival_time:
+                if existing is None or arr_secs < existing.arrival_secs:
                     current_round[candidate.stop_id] = candidate
 
-            destination_label = current_round.get(request.to_stop_id)
-
+            destination_label = current_round.get(to_stop_id)
             if destination_label is not None:
                 destination_labels.append(destination_label)
+                # Every subsequent round has strictly more transfers, so any
+                # non-dominated journey in later rounds must arrive strictly
+                # earlier than the best arrival found so far.
+                if destination_label.arrival_secs - 1 < scan_cutoff_secs:
+                    scan_cutoff_secs = destination_label.arrival_secs - 1
 
-            if not current_round:
+            if not current_round or scan_cutoff_secs < 0:
                 break
 
             previous_round = current_round
@@ -248,10 +238,9 @@ class ZTMConnectionSearchService:
             journey = self._reconstruct_connection(
                 data=data,
                 origin_stop_id=request.from_stop_id,
-                destination_stop_id=request.to_stop_id,
+                destination_stop_id=to_stop_id,
                 destination_label=label,
             )
-
             if journey is not None:
                 journeys.append(journey)
 
@@ -304,114 +293,72 @@ class ZTMConnectionSearchService:
         if request.limit < 1:
             raise ValueError("limit must be at least 1")
 
-    def _build_connections(
+    def _get_scan_segments(
         self,
-        *,
         data: PrecomputedData,
         departure_time: datetime,
-        horizon_end: datetime,
-    ) -> list[_ScheduledConnection]:
-        """Build adjacent-stop connections for relevant service days.
-
-        Previous service day is required for GTFS times such as 25:30:00
-        that occur after midnight on the following calendar date.
+        horizon_secs: int,
+    ) -> list[_ScanSegment]:
         """
-        first_day = departure_time.date() - timedelta(days=1)
+        Slice each relevant service day's shared template tuple to the search
+        window and emit lightweight integer-offset tuples for C-level merging.
+        """
+        try:
+            first_day = departure_time.date() - timedelta(days=data.connection_index_lookback_days)
+        except OverflowError:
+            first_day = departure_time.date().min
+
+        horizon_end = departure_time + timedelta(seconds=horizon_secs)
         last_day = horizon_end.date()
-        bounds = self._schedule.available_date_range
-        if bounds is not None:
-            first_day = max(first_day, bounds[0])
-            last_day = min(last_day, bounds[1])
-        connections: list[_ScheduledConnection] = []
 
-        service_day = first_day
-        while service_day <= last_day:
-            active_services = {
-                service_id
-                for service_id, service in data.services.items()
-                if service.runs_on(service_day)
-            }
+        daily_lists: list[list[_ScanSegment]] = []
+        day = first_day
 
-            if active_services:
-                midnight = datetime.combine(service_day, time.min)
-                for trip_id, stop_times in data.stop_times_by_trip.items():
-                    trip = data.trips_by_id.get(trip_id)
-                    if trip is None or trip.service_id not in active_services:
-                        continue
+        while day <= last_day:
+            templates = data.connections_by_service_day.get(day)
+            if templates:
+                day_midnight = datetime(day.year, day.month, day.day)
+                # Offset in seconds from request.departure_time to day_midnight
+                day_offset_secs = int((day_midnight - departure_time).total_seconds())
+                start_secs = -day_offset_secs
+                end_secs = horizon_secs - day_offset_secs
 
-                    for current, following in zip(stop_times, stop_times[1:], strict=False):
-                        departure = midnight + timedelta(seconds=current.departure_secs)
-                        arrival = midnight + timedelta(seconds=following.arrival_secs)
+                start_idx = bisect_left(
+                    templates,
+                    start_secs,
+                    key=lambda tpl: tpl.departure_secs,
+                )
+                end_idx = bisect_right(
+                    templates,
+                    end_secs,
+                    lo=start_idx,
+                    key=lambda tpl: tpl.departure_secs,
+                )
 
-                        if departure < departure_time or departure > horizon_end:
-                            continue
-                        if arrival < departure or arrival > horizon_end:
-                            continue
-
-                        connections.append(
-                            _ScheduledConnection(
-                                trip_id=trip_id,
-                                route_id=trip.route_id,
-                                service_id=trip.service_id,
-                                departure_stop_id=current.stop_id,
-                                arrival_stop_id=following.stop_id,
-                                departure_time=departure,
-                                arrival_time=arrival,
-                                departure_sequence=current.stop_sequence,
-                                arrival_sequence=following.stop_sequence,
-                                pickup_type=current.pickup_type,
-                                drop_off_type=following.drop_off_type,
+                if start_idx < end_idx:
+                    daily_lists.append(
+                        [
+                            (
+                                day_offset_secs + tpl.departure_secs,
+                                day_offset_secs + tpl.arrival_secs,
+                                day,
+                                tpl,
                             )
-                        )
+                            for tpl in templates[start_idx:end_idx]
+                        ]
+                    )
 
-            service_day += timedelta(days=1)
+            day += timedelta(days=1)
 
-        connections.sort(
-            key=lambda item: (
-                item.departure_time,
-                item.arrival_time,
-                item.trip_id,
-                item.departure_sequence,
-            )
-        )
-        return connections
+        if not daily_lists:
+            return []
 
-    @staticmethod
-    def _add_nondominated_label(
-        labels_by_stop: dict[str, list[_Label]],
-        candidate: _Label,
-    ) -> None:
-        """Keep non-dominated labels for a stop and last-trip state.
+        if len(daily_lists) == 1:
+            return daily_lists[0]
 
-        Labels with different last trips are kept separately because being
-        aboard a particular trip permits continuation without a transfer.
-        """
-        labels = labels_by_stop.setdefault(candidate.stop_id, [])
-        comparable = [
-            existing
-            for existing in labels
-            if existing.last_trip_id == candidate.last_trip_id
-            and existing.can_alight == candidate.can_alight
-        ]
-
-        if any(
-            existing.arrival_time <= candidate.arrival_time
-            and existing.transfers <= candidate.transfers
-            for existing in comparable
-        ):
-            return
-
-        labels[:] = [
-            existing
-            for existing in labels
-            if not (
-                existing.last_trip_id == candidate.last_trip_id
-                and existing.can_alight == candidate.can_alight
-                and candidate.arrival_time <= existing.arrival_time
-                and candidate.transfers <= existing.transfers
-            )
-        ]
-        labels.append(candidate)
+        # C-level tuple comparison on (dep_rel_secs, arr_rel_secs, day, tpl)
+        # avoids Python key= callbacks across hundreds of thousands of items.
+        return list(merge(*daily_lists))
 
     def _reconstruct_connection(
         self,
@@ -421,11 +368,11 @@ class ZTMConnectionSearchService:
         destination_stop_id: str,
         destination_label: _Label,
     ) -> Connection | None:
-        segments: list[_ScheduledConnection] = []
+        segments: list[tuple[date, ServiceConnectionTemplate]] = []
         label: _Label | None = destination_label
 
-        while label is not None and label.connection is not None:
-            segments.append(label.connection)
+        while label is not None and label.template is not None and label.service_day is not None:
+            segments.append((label.service_day, label.template))
             label = label.previous
 
         segments.reverse()
@@ -434,21 +381,22 @@ class ZTMConnectionSearchService:
 
         # Collapse consecutive adjacent-stop segments on the same trip into
         # one passenger-facing leg.
-        grouped: list[list[_ScheduledConnection]] = []
-        for segment in segments:
+        grouped: list[list[tuple[date, ServiceConnectionTemplate]]] = []
+        for service_day, tpl in segments:
             if (
                 grouped
-                and grouped[-1][-1].trip_id == segment.trip_id
-                and grouped[-1][-1].arrival_stop_id == segment.departure_stop_id
+                and grouped[-1][-1][1].trip_id == tpl.trip_id
+                and grouped[-1][-1][0] == service_day
+                and grouped[-1][-1][1].arrival_stop_id == tpl.departure_stop_id
             ):
-                grouped[-1].append(segment)
+                grouped[-1].append((service_day, tpl))
             else:
-                grouped.append([segment])
+                grouped.append([(service_day, tpl)])
 
         legs: list[ConnectionLeg] = []
         for group in grouped:
-            first = group[0]
-            last = group[-1]
+            first_day, first = group[0]
+            last_day, last = group[-1]
             trip = data.trips_by_id.get(first.trip_id)
             route = data.routes_by_id.get(first.route_id)
             from_stop = data.stops_by_id.get(first.departure_stop_id)
@@ -456,6 +404,9 @@ class ZTMConnectionSearchService:
 
             if trip is None or from_stop is None or to_stop is None:
                 return None
+
+            first_midnight = datetime(first_day.year, first_day.month, first_day.day)
+            last_midnight = datetime(last_day.year, last_day.month, last_day.day)
 
             legs.append(
                 ConnectionLeg(
@@ -465,10 +416,10 @@ class ZTMConnectionSearchService:
                     trip_headsign=trip.trip_headsign,
                     from_stop_id=first.departure_stop_id,
                     from_stop_name=from_stop.stop_name,
-                    departure_time=first.departure_time,
+                    departure_time=first_midnight + timedelta(seconds=first.departure_secs),
                     to_stop_id=last.arrival_stop_id,
                     to_stop_name=to_stop.stop_name,
-                    arrival_time=last.arrival_time,
+                    arrival_time=last_midnight + timedelta(seconds=last.arrival_secs),
                 )
             )
 
