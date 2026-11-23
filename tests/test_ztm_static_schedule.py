@@ -108,7 +108,7 @@ def test_load_keeps_existing_feed_and_builds_independent_indexes(sample_gtfs):
     assert [route.route_id for route in schedule.get_all_routes()] == ["R1", "R2"]
     assert [stop.stop_id for stop in reloaded.get_all_stops()] == ["X1", "X2"]
     assert [route.route_id for route in reloaded.get_all_routes()] == ["RX"]
-    assert [time.stop_id for time in reloaded.get_stop_times_for_trip("TX")] == ["X1", "X2"]
+    assert [time.stop_id for time in reloaded.data.stop_times_by_trip["TX"]] == ["X1", "X2"]
 
 
 def test_concurrent_loads_produce_independent_consistent_feeds(sample_gtfs):
@@ -166,11 +166,12 @@ def test_empty_collection_getters_return_empty_lists():
     schedule = ZTMStaticSchedule()
     assert schedule.get_all_stops() == []
     assert schedule.get_all_routes() == []
+    assert schedule.get_all_stop_groups() == []
     assert schedule.get_stop("nope") is None
+    assert schedule.get_stop_group("nope") is None
+    assert schedule.get_stops_for_group("nope") == []
     assert schedule.get_route("nope") is None
-    assert schedule.get_stop_times_for_trip("nope") == []
     assert schedule.get_routes_for_stop("nope") == []
-    assert schedule.get_stops_by_name("nope") == []
     assert schedule.get_route_summary("nope") is None
 
 
@@ -180,9 +181,10 @@ def test_get_stop_and_route_by_id(sample_gtfs):
     assert schedule.get_route("R1").route_long_name == "Łęczyca"
 
 
-def test_get_stop_times_for_trip(sample_gtfs):
+def test_load_orders_trip_stops_by_sequence(sample_gtfs):
+    sample_gtfs["stop_times"].reverse()
     schedule = _loaded(sample_gtfs)
-    times = schedule.get_stop_times_for_trip("T1")
+    times = schedule.data.stop_times_by_trip["T1"]
     assert [time.stop_id for time in times] == ["S1", "S2"]
 
 
@@ -199,20 +201,17 @@ def test_get_stop_sequence_for_route(sample_gtfs):
     ]
 
 
-def test_get_stops_by_name_is_normalized(sample_gtfs):
+def test_fuzzy_search_stops_normalizes_names(sample_gtfs):
     schedule = _loaded(sample_gtfs)
-    assert [stop.stop_id for stop in schedule.get_stops_by_name("rynek")] == ["S1"]
+    hits = schedule.fuzzy_search_stops(" ŻABINKO ")
+    assert hits[0].stop.stop_id == "S2"
+    assert hits[0].score == 1.0
 
 
 def test_fuzzy_search_stops_handles_partial_match(sample_gtfs):
     schedule = _loaded(sample_gtfs)
     hits = schedule.fuzzy_search_stops("zabink")
     assert hits and hits[0].stop.stop_id == "S2"
-
-
-def test_get_active_services(sample_gtfs):
-    schedule = _loaded(sample_gtfs)
-    assert schedule.get_active_services(date(2026, 6, 15)) == {"WKD"}
 
 
 def test_get_next_departures(sample_gtfs):
@@ -222,12 +221,7 @@ def test_get_next_departures(sample_gtfs):
     )
     assert [entry["departure_time"] for entry in departures] == ["05:38:00", "25:30:00"]
     assert departures[0]["route_id"] == "R1"
-
-
-def test_get_trip_summary_includes_datetimes(sample_gtfs):
-    schedule = _loaded(sample_gtfs)
-    summary = schedule.get_trip_summary("T2", service_day=date(2026, 6, 15))
-    assert summary[0]["departure_datetime"] == "2026-06-16T01:30:00"
+    assert departures[1]["departure_datetime"] == "2026-06-16T01:30:00"
 
 
 def test_get_route_summary(sample_gtfs):
@@ -241,6 +235,13 @@ def test_real_feed_loads_into_object_model(real_gtfs):
     schedule = ZTMStaticSchedule.load(real_gtfs)
     assert len(schedule.get_all_stops()) == len(real_gtfs["stops"])
     assert len(schedule.get_all_routes()) == len(real_gtfs["routes"])
+
+    expected_groups: dict[str, set[str]] = {}
+    for row in real_gtfs["stops"]:
+        expected_groups.setdefault(row["stop_name"].strip(), set()).add(row["stop_id"].strip())
+    assert {
+        group.stop_name: set(group.stop_ids) for group in schedule.get_all_stop_groups()
+    } == expected_groups
 
 
 def test_connection_templates_are_deduplicated_across_identical_service_days(sample_gtfs):

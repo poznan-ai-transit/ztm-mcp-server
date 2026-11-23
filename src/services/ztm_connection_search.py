@@ -88,8 +88,6 @@ class ZTMConnectionSearchService:
     or alighting in GTFS rather than an absolute prohibition.
     """
 
-    DEFAULT_MAX_TRANSFERS = 2
-    DEFAULT_LIMIT = 5
     DEFAULT_MINIMUM_TRANSFER_SECONDS = 0
     DEFAULT_SEARCH_HORIZON_SECONDS = 24 * 60 * 60
 
@@ -255,25 +253,6 @@ class ZTMConnectionSearchService:
         )
 
         return journeys[: request.limit]
-
-    def find_next_connections(
-        self,
-        from_stop_id: str,
-        to_stop_id: str,
-        departure_time: datetime,
-        limit: int = DEFAULT_LIMIT,
-        max_transfers: int = DEFAULT_MAX_TRANSFERS,
-    ) -> list[Connection]:
-        """Convenience wrapper around :meth:`search_connections`."""
-        return self.search_connections(
-            ConnectionSearchRequest(
-                from_stop_id=from_stop_id,
-                to_stop_id=to_stop_id,
-                departure_time=departure_time,
-                max_transfers=max_transfers,
-                limit=limit,
-            )
-        )
 
     @staticmethod
     def _validate_request(request: ConnectionSearchRequest) -> None:
