@@ -229,12 +229,6 @@ class ZTMService:
         logger.debug("Read %s rows from %s", len(rows), filename)
         return rows
 
-    def _seconds_until_next_six_am(self, now: datetime) -> float:
-        next_run: datetime = now.replace(hour=6, minute=0, second=0, microsecond=0)
-        if next_run <= now:
-            next_run = next_run + timedelta(days=1)
-        return (next_run - now).total_seconds()
-
     def _seconds_until_next_refresh(self, now: datetime) -> float:
         six_am = now.replace(hour=6, minute=0, second=0, microsecond=0)
         if six_am <= now:
