@@ -21,11 +21,13 @@ async def ztm_service_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]
     # Keep MCP requests out until the initial collection has been validated and published.
     # Downloading/parsing runs off the event loop; failure prevents an empty server starting.
     await asyncio.to_thread(ztm_service.start_daily_refresh)
+    realtime_service: ZTMRealtimeDelays | None = None
+    alerts_service: ZTMServiceAlerts | None = None
 
     try:
-        realtime_service: ZTMRealtimeDelays = ZTMRealtimeDelays(ztm_service.repository)
+        realtime_service = ZTMRealtimeDelays(ztm_service.repository)
         await asyncio.to_thread(realtime_service.start_auto_refresh, interval_seconds=30)
-        alerts_service: ZTMServiceAlerts = ZTMServiceAlerts()
+        alerts_service = ZTMServiceAlerts()
         await asyncio.to_thread(alerts_service.start_auto_refresh, interval_seconds=60)
         yield {
             "ztm_static_storage": ztm_service.repository,

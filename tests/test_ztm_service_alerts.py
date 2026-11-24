@@ -292,7 +292,8 @@ def test_get_alerts_filters_by_direction_id(alerts_service):
 
 def test_get_alerts_returns_empty_before_first_refresh(alerts_service):
     assert alerts_service.snapshot is None
-    assert alerts_service.get_alerts() == []
+    with pytest.raises(GTFSAlertsError, match="not loaded yet"):
+        alerts_service.get_alerts()
 
 
 # ---------------------------------------------------------------------------

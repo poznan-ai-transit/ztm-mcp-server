@@ -25,7 +25,7 @@ from services.ztm_connection_search import (
 )
 from services.ztm_realtime_delays import ZTMRealtimeDelays
 from services.ztm_schedule_repository import ScheduleRepository, warsaw_today
-from services.ztm_service_alerts import ZTMServiceAlerts
+from services.ztm_service_alerts import GTFSAlertsError, ZTMServiceAlerts
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
@@ -463,11 +463,14 @@ def get_service_alerts(
         raise ToolError("Invalid stop_id. Provide a non-empty stop_id or omit it.")
 
     alerts_service = _get_alerts_service(ctx)
-    alerts = alerts_service.get_alerts(
-        route_id=route_id,
-        stop_id=stop_id,
-        active_only=active_only,
-    )
+    try:
+        alerts = alerts_service.get_alerts(
+            route_id=route_id,
+            stop_id=stop_id,
+            active_only=active_only,
+        )
+    except GTFSAlertsError as exc:
+        raise ToolError(str(exc)) from exc
 
     logger.debug("get_service_alerts returned %d alerts", len(alerts[:limit]))
     return [alert.to_dict() for alert in alerts[:limit]]

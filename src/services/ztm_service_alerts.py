@@ -329,7 +329,7 @@ class ZTMServiceAlerts:
     ) -> list[ServiceAlert]:
         snapshot = self.snapshot
         if snapshot is None:
-            return []
+            raise GTFSAlertsError("Service alerts snapshot is not loaded yet")
 
         moment = at if at is not None else datetime.now(POZNAN_TZ)
         if moment.tzinfo is None:
