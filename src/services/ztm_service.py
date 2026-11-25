@@ -81,37 +81,65 @@ class MissingGTFSFileError(FileNotFoundError):
 
 
 class ZTMService:
-    _instance = None
+    _instance: ZTMService | None = None
     _instance_lock: LockType = threading.Lock()
 
     @classmethod
-    def instance(cls) -> ZTMService:
-        return cls()
+    def initialize(
+        cls, *, schedule_url: str | None = None, schedule_file: Path | None = None
+    ) -> None:
+        """Create the process-wide service once, publishing it only after initialization."""
+        with cls._instance_lock:
+            if cls._instance is not None:
+                raise RuntimeError("ZTMService is already initialized")
+            service = object.__new__(cls)
+            service.__init__(schedule_url=schedule_url, schedule_file=schedule_file)
+            cls._instance = service
 
-    def __new__(cls) -> ZTMService:
+    @classmethod
+    def instance(cls) -> ZTMService:
+        """Return the initialized service without creating or configuring it."""
         if cls._instance is None:
-            with cls._instance_lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
+            raise RuntimeError("ZTMService is not initialized. Call ZTMService.initialize() first.")
         return cls._instance
 
-    def __init__(self) -> None:
-        if getattr(self, "_initialized", False):
-            return
+    def __new__(cls, **kwargs: Any) -> ZTMService:
+        raise TypeError(
+            "Use ZTMService.initialize() to create the service and instance() to get it."
+        )
+
+    def __init__(
+        self, *, schedule_url: str | None = None, schedule_file: Path | None = None
+    ) -> None:
+        schedule_file = (
+            Path(schedule_file).expanduser().resolve() if schedule_file is not None else None
+        )
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        if schedule_url is not None and schedule_file is not None:
+            raise ValueError("Choose either a schedule URL or a local file, not both")
+        self._schedule_url = schedule_url
+        self._schedule_file = schedule_file
         self.repository = ScheduleRepository()
-        self._initialized = True
 
     def start_daily_refresh(self) -> None:
-        """Load initial schedules before returning, then refresh daily at 6 AM."""
+        """Load selected schedules before returning, then refresh daily at 6 AM.
+
+        An empty URL selects today's feed; no URL or file keeps full coverage.
+        The same selection policy applies to every background refresh.
+        """
         if self._thread is not None and self._thread.is_alive():
             raise RuntimeError("Daily refresh is already running")
-
         self._stop_event.clear()
         logger.info("Loading initial GTFS schedules before accepting MCP requests")
-        self._refresh_schedules()
+        refresh = self._refresh_schedules
+        if self._schedule_url is not None or self._schedule_file is not None:
+            logger.info(
+                "Single-schedule mode: %s",
+                self._schedule_file or self._schedule_url or "today in Europe/Warsaw",
+            )
+            refresh = self._refresh_single_schedule
+        refresh()
 
         def _runner() -> None:
             backoff = ini.refresh_retry_initial_seconds
@@ -121,7 +149,7 @@ class ZTMService:
             while not self._stop_event.is_set():
                 try:
                     logger.info("Refreshing static GTFS schedules")
-                    self._refresh_schedules()
+                    refresh()
                     backoff = ini.refresh_retry_initial_seconds
                     delay = self._seconds_until_next_refresh(datetime.now(WARSAW))
                     logger.info("GTFS refresh completed; next refresh in %.0f seconds", delay)
@@ -157,6 +185,42 @@ class ZTMService:
             raise ValueError("No GTFS archives found on the ZTM archive page")
         return sorted(parser.archives, key=lambda item: (item.modified_at, item.filename))
 
+    def _refresh_single_schedule(self) -> None:
+        """Load the selected development source and publish exactly one feed."""
+        if self._schedule_url == "":
+            today = warsaw_today()
+            current = [
+                archive
+                for archive in self.list_gtfs_archives()
+                if archive.start_date <= today <= archive.end_date
+            ]
+            if not current:
+                raise ValueError(f"No GTFS archive covers {today} on {ini.gtfs_archives_url}")
+            archive = max(current, key=lambda item: (item.modified_at, item.filename))
+            entry = next(
+                (
+                    item
+                    for item in self.repository.list_schedules()
+                    if item.filename == archive.filename
+                ),
+                None,
+            )
+            if entry is None or entry.modified_at != archive.modified_at:
+                schedule = ZTMStaticSchedule.load(self.get_static_gtfs(archive.filename))
+                entry = ScheduleEntry(archive.filename, archive.modified_at, schedule)
+            entry.schedule.validate_date_range(today)
+        else:
+            source = str(self._schedule_file or self._schedule_url)
+            archive_zip = (
+                zipfile.ZipFile(self._schedule_file)
+                if self._schedule_file is not None
+                else self._fetch_static_gtfs_zip(self._schedule_url)
+            )
+            with archive_zip as zf:
+                schedule = ZTMStaticSchedule.load(self._read_gtfs_zip(zf))
+            entry = ScheduleEntry(source, datetime.now(WARSAW), schedule)
+        self._publish_schedules((entry,))
+
     def _refresh_schedules(self, today: date | None = None) -> None:
         """Publish all feeds reaching the rolling cutoff, including future feeds.
 
@@ -186,7 +250,10 @@ class ZTMService:
         while day <= today:
             candidate.for_date(day)
             day += timedelta(days=1)
-        self.repository.replace(candidate.list_schedules())
+        self._publish_schedules(candidate.list_schedules())
+
+    def _publish_schedules(self, entries: tuple[ScheduleEntry, ...]) -> None:
+        self.repository.replace(entries)
 
         # Unfreeze any retired schedules from a prior refresh, sweep temporary
         # parsing garbage, and freeze the active static schedules so Gen-2 GC
@@ -200,13 +267,16 @@ class ZTMService:
     def get_static_gtfs(self, filename: str | None = None) -> dict[str, Any]:
         logger.debug("Reading GTFS archive %s", filename or "from default endpoint")
         with self._fetch_static_gtfs_zip(ini.gtfs_endpoint, filename=filename) as zf:
-            stops: list[dict[str, str]] = self._read_csv_from_zip(zf, "stops.txt")
-            routes: list[dict[str, str]] = self._read_csv_from_zip(zf, "routes.txt")
-            stop_times: list[dict[str, str]] = self._read_csv_from_zip(zf, "stop_times.txt")
-            trips: list[dict[str, str]] = self._read_csv_from_zip(zf, "trips.txt")
-            calendar: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar.txt")
-            feed_info: list[dict[str, str]] = self._read_csv_from_zip(zf, "feed_info.txt")
-            calendar_dates: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar_dates.txt")
+            return self._read_gtfs_zip(zf)
+
+    def _read_gtfs_zip(self, zf: zipfile.ZipFile) -> dict[str, Any]:
+        stops: list[dict[str, str]] = self._read_csv_from_zip(zf, "stops.txt")
+        routes: list[dict[str, str]] = self._read_csv_from_zip(zf, "routes.txt")
+        stop_times: list[dict[str, str]] = self._read_csv_from_zip(zf, "stop_times.txt")
+        trips: list[dict[str, str]] = self._read_csv_from_zip(zf, "trips.txt")
+        calendar: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar.txt")
+        feed_info: list[dict[str, str]] = self._read_csv_from_zip(zf, "feed_info.txt")
+        calendar_dates: list[dict[str, str]] = self._read_csv_from_zip(zf, "calendar_dates.txt")
 
         return {
             "stops": stops,

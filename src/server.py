@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from functools import partial
+
 from fastmcp import FastMCP
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
+from cli import StartupOptions
 from ini import ini
 from logging_config import logger
 from mcp_server.lifespans import ztm_service_lifespan
@@ -37,17 +40,18 @@ Limitations:
 """
 
 
-def create_server() -> FastMCP:
+def create_server(options: StartupOptions | None = None) -> FastMCP:
     """Create a configured server without starting its lifespan or transport."""
 
     logger.info("Creating MCP server")
+    options = options or StartupOptions()
 
     mcp = FastMCP(
         "ztm-poznan",
         instructions=SERVER_INSTRUCTIONS,
         strict_input_validation=True,
         mask_error_details=True,
-        lifespan=ztm_service_lifespan,
+        lifespan=partial(ztm_service_lifespan, options=options),
     )
 
     logger.debug("Mounting MCP tools")

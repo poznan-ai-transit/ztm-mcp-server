@@ -35,7 +35,8 @@ def real_gtfs() -> dict:
     re-parsing. Tests that exercise the loading itself call the service directly.
     Session scope means this is unaffected by the per-test singleton reset.
     """
-    service = ZTMService()
+    ZTMService.initialize()
+    service = ZTMService.instance()
     with service._mock_gtfs_zip() as archive:
         return {
             name: service._read_csv_from_zip(archive, f"{name}.txt")

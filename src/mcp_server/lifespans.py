@@ -3,19 +3,23 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.server.lifespan import lifespan
 
+from cli import StartupOptions
 from logging_config import logger
 from services.ztm_realtime_delays import ZTMRealtimeDelays
 from services.ztm_service import ZTMService
 
 
-@lifespan
-async def ztm_service_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+@asynccontextmanager
+async def ztm_service_lifespan(
+    server: FastMCP, *, options: StartupOptions
+) -> AsyncIterator[dict[str, Any]]:
     logger.info("Starting ZTM service lifespan")
+    ZTMService.initialize(schedule_url=options.schedule_url, schedule_file=options.schedule_file)
     ztm_service: ZTMService = ZTMService.instance()
     # Keep MCP requests out until the initial collection has been validated and published.
     # Downloading/parsing runs off the event loop; failure prevents an empty server starting.
