@@ -1,5 +1,11 @@
 # Document 2: Minimum Viable Product (MVP)
 
+This document records the original mock-phase scope. The current implementation
+on `origin/main` also supports static journey search with `search_connection`
+and GTFS-RT departure enrichment with `get_departures`; see
+[`05-mvp-implementation.md`](05-mvp-implementation.md) and the
+session-based [`use cases`](06-use-cases.md).
+
 ## Scope Boundaries
 *   **Supported Location:** Strictly Poznań. The agent must be explicitly configured to refuse any transit queries outside of Poznań (e.g., Kraków).
 *   **Capability Awareness:** The agent must be able to clearly communicate its purpose and limitations to the user (e.g., "I can help you check static public transport schedules in Poznań").

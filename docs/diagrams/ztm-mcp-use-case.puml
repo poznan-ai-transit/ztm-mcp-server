@@ -1,66 +1,69 @@
 @startuml ztm-mcp-use-case
-' Use case diagram for the ZTM Poznań MCP server.
-
+' Capability baseline: origin/main da7ce68, checked 2026-11-25.
+' Session-based use cases; see docs/06-use-cases.md.
 left to right direction
 skinparam packageStyle rectangle
-skinparam actorStyle awesome
 skinparam shadowing false
-skinparam defaultFontName "Helvetica"
+skinparam defaultFontName Helvetica
 skinparam usecase {
-  BackgroundColor<<MVP>>      #9FE1CB
-  BorderColor<<MVP>>          #0F6E56
-  BackgroundColor<<PostMVP>>  #D3D1C7
-  BorderColor<<PostMVP>>      #5F5E5A
-  BackgroundColor<<System>>   #9FE1CB
-  BorderColor<<System>>       #0F6E56
+  BackgroundColor<<Supported>> #9FE1CB
+  BackgroundColor<<Assistant>> #DCEBFF
+  BackgroundColor<<Future>> #E6E6E6
 }
-
-actor "Commuter"        as user
-actor "AI agent\n(Claude / ChatGPT / Copilot)" as agent
-
-rectangle "ztm-mcp-server" {
-  usecase "Query departures\nby line and stop"   as UC1 <<MVP>>
-  usecase "List routes and stops"                as UC2 <<MVP>>
-  usecase "Request missing context"              as UC3 <<MVP>>
-  usecase "Reject non-Poznań queries"            as UC4 <<MVP>>
-  usecase "Explain capabilities"                 as UC5 <<MVP>>
-  usecase "Refresh static GTFS\n(daily snapshot)" as UC6 <<System>>
-  usecase "Check real-time delays"               as UC7 <<PostMVP>>
-  usecase "Track vehicle positions"              as UC8 <<PostMVP>>
-  usecase "View service alerts"                  as UC9 <<PostMVP>>
+actor "Commuter / friends" as user
+actor "AI assistant" as agent
+actor "Web / venue sources" as web
+actor "ZTM static GTFS" as ztm
+actor "ZTM GTFS-RT trip updates" as rt
+actor "30-second refresh worker" as rtworker
+actor "Daily scheduler" as sched
+rectangle "Assistant workflows (MCP + other sources)" {
+  usecase "Plan activities between commitments" as activity <<Assistant>>
+  usecase "Find a café reachable from two origins" as meeting <<Assistant>>
 }
-
-actor "ZTM Poznań\nOpen Data API" as ztm  <<external>>
-actor "Daily scheduler\n(06:00)"  as sched <<system>>
-
-' Human <-> agent (the human never touches the server directly)
-user -- agent : natural language
-
-' Agent calls MCP tools
-agent --> UC1
-agent --> UC2
-agent --> UC4
-agent --> UC5
-agent --> UC7
-agent --> UC8
-agent --> UC9
-
-' Behavior rules from docs/03-requirements.md
-UC1 ..> UC3 : <<include>>
-UC1 ..> UC4 : <<include>>
-UC1 ..> UC6 : <<include>>
-
-' Background refresh job (src/services/ztm_service.py: start_daily_refresh)
-sched --> UC6
-UC6  --> ztm : download GTFS zip
-UC7  --> ztm : poll trip_updates.pb
-UC8  --> ztm : poll vehicle_positions.pb
-UC9  --> ztm : poll feeds.pb
-
-legend bottom right
-  |= Color |= Meaning |
-  | <#9FE1CB> | MVP scope |
-  | <#D3D1C7> | Post-MVP |
+rectangle "ztm-mcp-server: origin/main capabilities" {
+  usecase "Find stops and platforms: search_stops" as stops <<Supported>>
+  usecase "Find lines: search_routes / get_routes_for_stop" as lines <<Supported>>
+  usecase "Scheduled + real-time departures: get_departures" as deps <<Supported>>
+  usecase "Find journeys with a transfer limit: search_connection" as journey <<Supported>>
+  usecase "Refresh static GTFS" as refresh <<Supported>>
+  usecase "Refresh trip updates (every 30 seconds)" as refreshRT <<Supported>>
+}
+rectangle "Not exposed on checked main" {
+  usecase "Vehicle positions; service alerts (separate branch)" as live <<Future>>
+}
+user -- agent : natural language / follow-ups
+agent --> stops
+agent --> lines
+agent --> deps
+agent --> journey
+agent --> activity
+agent --> meeting
+activity ..> journey : uses
+meeting ..> journey : compares both origins
+activity --> web : venues / opening hours
+meeting --> web : cafés / opening hours
+sched --> refresh
+refresh --> ztm : download snapshot
+rtworker --> refreshRT
+refreshRT --> rt : trip_updates.pb
+deps ..> refreshRT : reads latest snapshot
+note bottom of deps
+  Predictions, delays, cancellations and skipped stops when available.
+  Missing updates do not mean on time; refresh failures retain old data.
+end note
+note bottom of journey
+  Scheduled data; same-stop-ID transfers only.
+  No live delays or walking transfers.
+end note
+note bottom of agent
+  Reuse context; consider all same-name platforms.
+  Ask for missing details; enforce Poznań scope.
+  Walking estimates and venue research are external.
+end note
+legend bottom
+  Green: implemented on origin/main da7ce68
+  Blue: assistant workflows using MCP and external sources
+  Grey: not exposed on checked main; alerts on origin/81-service-alerts
 endlegend
-
 @enduml
