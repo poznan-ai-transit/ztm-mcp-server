@@ -13,6 +13,7 @@ MCP transport wrappers. The server supplies `ctx`; never include it in arguments
 | [`search_routes`](#search_routes) | Find route IDs by line number, name, or ID. |
 | [`get_routes_for_stop`](#get_routes_for_stop) | List routes serving a stop. |
 | [`get_departures`](#get_departures) | Get scheduled departures for a stop, route, and service day. |
+| [`search_connection`](#search_connection) | Find scheduled journeys between stops with a transfer limit. |
 
 ## Shared rules
 
@@ -129,6 +130,41 @@ outside the loaded dataset's supported range are rejected.
 An empty `departures` array retains all response metadata and means no matching
 service at or after `time`: the route may not serve the stop, date, or direction.
 Unknown IDs are errors. Static results never imply zero delay or live status.
+
+## `search_connection`
+
+Search static journeys between resolved stop IDs. Resolve names with
+`search_stops` and consider applicable same-name platforms.
+
+| Input | Type | Requirement |
+|---|---|---|
+| `from_stop_id` | string | Required resolved origin stop ID. |
+| `to_stop_id` | string | Required resolved destination stop ID. |
+| `date` | string | Required service date, `YYYY-MM-DD`. |
+| `time` | string | Required earliest departure, `HH:MM`, Europe/Warsaw local time. |
+| `max_transfers` | integer | Optional; default `2`, range `0`–`10`; `0` means direct only. |
+| `limit` | integer | Optional; default `5`, range `1`–`100`. |
+
+Returns an array with `from_stop_id`, `from_stop_name`, `to_stop_id`,
+`to_stop_name`, `departure_time`, `arrival_time`, `duration_seconds`,
+`transfers` and `legs`. Each leg contains `trip_id`, `route_id`,
+`route_short_name`, `trip_headsign`, `from_stop_id`, `from_stop_name`,
+`to_stop_id`, `to_stop_name`, `departure_time` and `arrival_time`.
+Datetimes are ISO strings in feed-local time without a UTC offset.
+Each leg represents one continuous ride on a scheduled trip.
+
+Results prioritize earliest arrival, fewer transfers, then earlier departure,
+retaining non-dominated alternatives. The search horizon is 24 hours from
+departure. Transfers use the same `stop_id` only, with no walking transfers
+and a default minimum transfer time of zero. No live data, arrive-by input,
+venue search or multi-origin optimizer is provided. `[]` means no matching
+journeys were found, and is also returned for identical endpoint IDs.
+
+Unknown endpoints raise `ToolError`: `Unknown origin stop_id. Use search_stops
+to find a valid stop.` or the corresponding `destination` message. Invalid
+date/time formats use the errors below. Out-of-range search arguments raise
+`Invalid max_transfers. Use a number from 0 to 10.` or
+`Invalid limit. Use a number from 1 to 100.`
 
 ## Errors
 

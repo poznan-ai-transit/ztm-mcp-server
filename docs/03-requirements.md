@@ -4,6 +4,11 @@
 This document defines baseline requirements for the MVP of `ztm-mcp-server`.
 It is consistent with `docs/01-product-goal.md` and `docs/02-mvp.md`.
 
+These are the original mock-phase requirements. Routing exclusions below refer
+to that phase: static journey search is now implemented. See
+[`05-mvp-implementation.md`](05-mvp-implementation.md) for current scope and
+[`06-use-cases.md`](06-use-cases.md) for scenarios observed in project sessions.
+
 ## Scope (MVP)
 - Supported city: **Poznan only**.
 - Supported data: **static timetable data only** (mocked/hardcoded in MVP).

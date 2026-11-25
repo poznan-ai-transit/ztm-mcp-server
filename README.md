@@ -1,6 +1,27 @@
 # ztm-mcp-server
 
-Example scripts for the **ZTM Poznań Open Data API** — public transport feeds (GTFS + GTFS-RT) published by Zarząd Transportu Miejskiego w Poznaniu.
+An MCP server that lets AI assistants answer Poznań public transport questions using static ZTM GTFS timetables. The repository also includes standalone GTFS-RT examples; live feeds are not exposed by the MCP server.
+
+## Use cases
+
+These examples reflect conversations tried in this project:
+
+| Ask the assistant | What it does |
+|---|---|
+| “Find Rondo Kaponiera stops.” / “Znajdź przystanek Rondo Kaponiera.” | Finds matching platforms; follow-ups can reuse the stop context. |
+| “Which lines serve those stops?” | Checks every matching platform and combines the line lists. |
+| “Show the next five departures of line 15 there today after 14:00.” | Resolves the line and returns scheduled departures across applicable platforms. |
+| “Get me from Poznań Główny to Rondo Kaponiera after 14:00, with at most one change.” | Searches scheduled journeys and shows boarding points, directions, arrival times and transfers. |
+| “I finish at Politechnika at 11:00 and need to be at Krauthofera by 12:30. What can I do on the way?” | Combines scheduled transit legs with activity research, walking estimates and an arrival buffer. |
+| “I'm near Rondo Kaponiera; my friend is at Politechnika. Find a café we can both reach around 17:00 without changing vehicles.” | Compares direct journeys from both origins with externally researched cafés. |
+
+The last two are assistant workflows: venue details and walking estimates come
+from other sources, while this MCP supplies scheduled transit. All times use
+Europe/Warsaw; live delays and walking transfers are not included. Resolve
+“today” when running a prompt; historical session times are not current advice.
+
+See [detailed use cases](docs/06-use-cases.md) and the
+[use case diagram](docs/diagrams/ztm-mcp-use-case.svg).
 
 ## Requirements
 
@@ -126,3 +147,5 @@ entirely against the bundled mock data — no network access required.
 | [docs/02-mvp.md](docs/02-mvp.md) | MVP boundaries, mock phase, and core behavior |
 | [docs/03-requirements.md](docs/03-requirements.md) | Functional and non-functional requirements for the MVP |
 | [docs/04-mcp-tool-contract.md](docs/04-mcp-tool-contract.md) | Tool inputs, outputs, JSON examples, identifier resolution, and errors |
+| [docs/05-mvp-implementation.md](docs/05-mvp-implementation.md) | Implemented capabilities and limitations |
+| [docs/06-use-cases.md](docs/06-use-cases.md) | Session-based scenarios, expected behavior, and assistant integrations |
