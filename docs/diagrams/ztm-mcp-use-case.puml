@@ -1,4 +1,5 @@
 @startuml ztm-mcp-use-case
+' Capability baseline: origin/main da7ce68, checked 2026-11-25.
 ' Session-based use cases; see docs/06-use-cases.md.
 left to right direction
 skinparam packageStyle rectangle
@@ -13,20 +14,23 @@ actor "Commuter / friends" as user
 actor "AI assistant" as agent
 actor "Web / venue sources" as web
 actor "ZTM static GTFS" as ztm
+actor "ZTM GTFS-RT trip updates" as rt
+actor "30-second refresh worker" as rtworker
 actor "Daily scheduler" as sched
 rectangle "Assistant workflows (MCP + other sources)" {
   usecase "Plan activities between commitments" as activity <<Assistant>>
   usecase "Find a café reachable from two origins" as meeting <<Assistant>>
 }
-rectangle "ztm-mcp-server: implemented static timetable tools" {
+rectangle "ztm-mcp-server: origin/main capabilities" {
   usecase "Find stops and platforms: search_stops" as stops <<Supported>>
   usecase "Find lines: search_routes / get_routes_for_stop" as lines <<Supported>>
-  usecase "Check scheduled departures: get_departures" as deps <<Supported>>
+  usecase "Scheduled + real-time departures: get_departures" as deps <<Supported>>
   usecase "Find journeys with a transfer limit: search_connection" as journey <<Supported>>
   usecase "Refresh static GTFS" as refresh <<Supported>>
+  usecase "Refresh trip updates (every 30 seconds)" as refreshRT <<Supported>>
 }
-rectangle "Future MCP integration" {
-  usecase "Live delays, positions and service alerts" as live <<Future>>
+rectangle "Not exposed on checked main" {
+  usecase "Vehicle positions; service alerts (separate branch)" as live <<Future>>
 }
 user -- agent : natural language / follow-ups
 agent --> stops
@@ -41,6 +45,13 @@ activity --> web : venues / opening hours
 meeting --> web : cafés / opening hours
 sched --> refresh
 refresh --> ztm : download snapshot
+rtworker --> refreshRT
+refreshRT --> rt : trip_updates.pb
+deps ..> refreshRT : reads latest snapshot
+note bottom of deps
+  Predictions, delays, cancellations and skipped stops when available.
+  Missing updates do not mean on time; refresh failures retain old data.
+end note
 note bottom of journey
   Scheduled data; same-stop-ID transfers only.
   No live delays or walking transfers.
@@ -51,8 +62,8 @@ note bottom of agent
   Walking estimates and venue research are external.
 end note
 legend bottom
-  Green: implemented MCP capabilities
+  Green: implemented on origin/main da7ce68
   Blue: assistant workflows using MCP and external sources
-  Grey: future integration, not current MCP tools
+  Grey: not exposed on checked main; alerts on origin/81-service-alerts
 endlegend
 @enduml

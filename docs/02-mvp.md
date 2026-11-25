@@ -1,7 +1,8 @@
 # Document 2: Minimum Viable Product (MVP)
 
 This document records the original mock-phase scope. The current implementation
-also supports static journey search with `search_connection`; see
+on `origin/main` also supports static journey search with `search_connection`
+and GTFS-RT departure enrichment with `get_departures`; see
 [`05-mvp-implementation.md`](05-mvp-implementation.md) and the
 session-based [`use cases`](06-use-cases.md).
 

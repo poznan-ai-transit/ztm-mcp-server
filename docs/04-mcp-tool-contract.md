@@ -1,7 +1,9 @@
 ﻿# MCP tool contract
 
-The tools in `src/mcp_server/tools.py` serve static timetables
-GTFS data. They provide no live delays, predictions, or vehicle status.
+The tools serve GTFS timetables. On `origin/main` at `da7ce68` (checked
+25 November 2026), `get_departures` additionally provides available GTFS-RT
+departure updates; journey search remains static. This branch's runtime still
+predates those changes. The real-time fields below document main's behavior.
 Response types are defined in `src/mcp_server/schemas.py`; results below exclude
 MCP transport wrappers. The server supplies `ctx`; never include it in arguments.
 
@@ -104,7 +106,7 @@ Returns an object with:
 | `route_id`, `route_short_name` | string | Selected route ID and displayed line. |
 | `date`, `time` | string | Requested service date and time. |
 | `direction_id` | integer or null | Requested direction filter. |
-| `realtime` | boolean | Always `false`. |
+| `realtime` | boolean | On main, true if at least one returned departure has a matching trip update. |
 | `departures` | array | Matches ordered by scheduled departure time. |
 
 Each departure contains:
@@ -117,6 +119,17 @@ Each departure contains:
 | `trip_headsign` | string | Destination/headsign. |
 | `direction_id` | integer | Trip direction. |
 | `stop_sequence` | integer | Position in the trip. |
+| `realtime` | boolean | On main, whether a matching trip update was found; does not guarantee a stop-level prediction. |
+| `departure_delay` | integer or null | Available departure delay in seconds. |
+| `realtime_departure_datetime` | string or null | Available predicted departure datetime, separate from the scheduled time. |
+| `realtime_status` | string or null | Available feed relationship, e.g. `CANCELED` or `SKIPPED`. |
+| `cancelled` | boolean | Whether the trip update reports cancellation. |
+
+Main refreshes GTFS-RT trip updates every 30 seconds. Missing updates or null
+predictions mean unavailable information, not zero delay. Failures retain the
+previous snapshot. Do not assume every departure has a prediction because the
+top-level flag is true. Scheduled departure selection and ordering are retained;
+this is not a separate prediction-sorted live departure board.
 
 ### Service-day behavior
 

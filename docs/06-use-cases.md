@@ -5,6 +5,13 @@ These scenarios were exercised in this project's Codex sessions on 18 November
 tool boundary, rather than promising that historical journeys or venue hours
 remain valid. Re-run searches for the requested date within the loaded timetable.
 
+Capability status below reflects `origin/main` at `da7ce68`, checked on
+25 November 2026. Real-time departure enrichment was merged in
+[PR #72](https://github.com/poznan-ai-transit/ztm-mcp-server/pull/72).
+The session examples predate this check; the real-time scenario below is an
+additional use case enabled by main, not a claim about those session results.
+This use-case branch has not incorporated main's runtime changes.
+
 ## Stop discovery and conversational follow-ups
 
 **Prompt:** “Find stops called Rondo Kaponiera in Poznań.” The Polish session
@@ -33,6 +40,31 @@ for “What's the next one?” and clarify only missing required information.
 The same session also tried line 221 at Rondo Kaponiera and found no matching
 departures. Report an empty result honestly; use route lookup to explain the
 mismatch when supported. Do not substitute a different line without saying so.
+
+## Departure delays, predictions and cancellations
+
+**Prompt:** “Is my next line 15 tram from Rondo Kaponiera delayed or cancelled?”
+
+Resolve the stop and route for the requested date, then call `get_departures`
+across applicable platforms. On current main, the response retains scheduled
+times and adds available GTFS-RT information: `departure_delay` in seconds,
+`realtime_departure_datetime`, `realtime_status` and `cancelled`. Show scheduled
+and predicted times separately and identify cancellations or skipped stops
+when reported. Do not recommend boarding a cancelled trip or at a skipped stop.
+
+The server refreshes trip updates every 30 seconds. Inspect each departure:
+the top-level `realtime` flag means at least one returned departure has a
+matching trip update, not that every departure has a prediction. A departure's
+`realtime=true` can also have no stop-level prediction. Missing updates or null
+delay fields mean unknown, not on time. Refresh failures retain the previous
+snapshot, so describe values as the latest available feed information rather
+than guaranteed current vehicle status. Historical timetable queries do not
+provide a real-time archive.
+
+This capability covers trip updates, not live vehicle locations or general
+service alerts. Alerts have an implementation on `origin/81-service-alerts`
+but are not merged into the checked main revision; vehicle tracking is not
+exposed through MCP tools.
 
 ## Journeys with a transfer preference
 
@@ -67,6 +99,10 @@ assistant supplies the activity plan. There is no arrive-by or activity-planning
 tool: compare returned arrival times against the deadline, and do not claim
 exhaustive optimization.
 
+For near-term travel, the assistant can additionally check `get_departures`
+for each selected leg and report available updates. This does not recalculate
+the journey or guarantee that its transfers or deadline remain feasible.
+
 ## Meeting a friend at a café
 
 **Prompt:** “I'm near Rondo Kaponiera and my friend is at Politechnika. Find
@@ -84,11 +120,16 @@ a café. Matching stop names may still mean different platforms. Venue hours,
 walking times and the meeting recommendation are external research or assistant
 estimates, not MCP results. There is no dedicated multi-origin optimizer.
 
+Departure updates can inform each person's immediate boarding plan, but the
+meeting recommendation and arrival comparison remain based on scheduled
+journeys; predicted arrival times are not supplied by `search_connection`.
+
 ## Common expectations
 
 - Use Europe/Warsaw local time and resolve relative dates when the prompt runs.
 - Reuse conversation context; ask concise questions for missing required details.
-- Label results as scheduled and exclude claims about live delays or positions.
+- Distinguish scheduled journeys from feed-backed departure predictions; never infer zero delay from a missing update.
+- Report real-time information per departure, including cancellations and skipped stops; do not claim live vehicle tracking.
 - Obtain stop and route facts from tools; never invent IDs, journeys or departures.
 - Keep venue facts sourced separately and label unverified hours or walking estimates.
 - Explain dataset date limits and unsupported requests clearly.
