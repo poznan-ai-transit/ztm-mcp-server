@@ -121,7 +121,7 @@ Each departure contains:
 | `stop_sequence` | integer | Position in the trip. |
 | `realtime` | boolean | On main, whether a matching trip update was found; does not guarantee a stop-level prediction. |
 | `departure_delay` | integer or null | Available departure delay in seconds. |
-| `realtime_departure_datetime` | string or null | Available predicted departure datetime, separate from the scheduled time. |
+| `realtime_departure_datetime` | string or null | Available predicted departure datetime, separate from the scheduled time; may include a UTC offset (e.g. `+02:00`). |
 | `realtime_status` | string or null | Available feed relationship, e.g. `CANCELED` or `SKIPPED`. |
 | `cancelled` | boolean | Whether the trip update reports cancellation. |
 

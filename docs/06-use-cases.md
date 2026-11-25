@@ -12,6 +12,52 @@ The session examples predate this check; the real-time scenario below is an
 additional use case enabled by main, not a claim about those session results.
 This use-case branch has not incorporated main's runtime changes.
 
+## Verification against the running MCP
+
+Checked on 25 November 2026 against `da7ce68` at `http://localhost:8000/mcp`.
+The checks exercised the actual HTTP MCP tools with that day's loaded GTFS
+and live trip-update feed. Times below are Europe/Warsaw and are dated test
+evidence, not reusable travel advice.
+
+| Use case | Observed result |
+|---|---|
+| Stop discovery | Resolved all six scenario stop names; Rondo Kaponiera returned ten exact-name platforms. |
+| Lines at a stop | Queried all ten Kaponiera platforms and combined 30 distinct route IDs. |
+| Departures | Line 15 after 14:00 returned 14:03, 14:05, 14:13, 14:15 and 14:23 across platforms. |
+| No matching service | Line 221 returned no departures from any Kaponiera platform after 14:00. |
+| Journeys | Both Poznań Główny → Rondo Kaponiera and the reverse returned direct journeys. A separate `max_transfers=1` call also returned journeys within the limit. |
+| Activity between commitments | Tram 13: Politechnika 11:11 → Wrocławska 11:14; tram 5: Wrocławska 11:47 → Krauthofera 12:06. |
+| Two-origin meeting | Direct tram 3: Kaponiera 16:35 → Aleje Marcinkowskiego 16:40; direct tram 5: Politechnika 16:32 → Aleje Marcinkowskiego 16:37. |
+| Live departure enrichment | Four sampled line 15 departures matched live trip updates, but none had a stop-level departure prediction or cancellation. Missing predictions remained null. |
+
+For the activity example, [Weranda Caffe](https://werandafamily.com/pl/restaurant/weranda-caffe)
+lists Świętosławska 10 and Wednesday hours 09:00–22:00. Assuming eight minutes
+walking each way from Wrocławska gives roughly 11:22–11:37 at the café before
+the 11:47 tram. Arrival at Krauthofera at 12:06 leaves 24 minutes for a final
+walk and buffer. The later 12:02 tram arrives at 12:21 and leaves only nine
+minutes, so it fails a ten-minute buffer even before the final walk.
+
+For the meeting example, the [city tourism listing for Stragan](https://visitpoznan.pl/stragan)
+gives Ratajczaka 31 and daily hours 08:00–21:00. The tested journeys allow a
+meeting at Aleje Marcinkowskiego at 16:40, with three minutes of scheduled
+waiting for one person, then a walk to coffee around 17:00. Venue information
+was checked separately; walking allowances are estimates, not verified walking
+routes. Exact appointment addresses and walking needs still affect feasibility.
+
+Predictions, cancellations, skipped stops and missing updates were also checked
+through an in-process MCP client with controlled GTFS-RT fixtures. A 120-second
+delay produced a predicted departure; cancellation and skipped-stop flags
+reached the response correctly. These are controlled checks, not observations
+of a live cancellation. The existing real-time, MCP-tool and connection-search
+test suites passed: **78 tests**.
+
+Limits of this verification: this validates the tool sequences and an assistant's
+manual composition, not a separate automated evaluation of every agent's
+clarification or language behavior. Main's tool descriptions and server
+instructions still contain stale statements denying live departure support;
+the response schema and observed results do support real-time enrichment.
+Those descriptions can mislead an assistant and need a runtime documentation fix.
+
 ## Stop discovery and conversational follow-ups
 
 **Prompt:** “Find stops called Rondo Kaponiera in Poznań.” The Polish session
