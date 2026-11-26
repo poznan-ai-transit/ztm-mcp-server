@@ -8,9 +8,9 @@ Design notes
 - On top of those records we build a handful of index dicts/lists that
   directly answer the queries an MCP tool will need:
     * _stops_by_id          - exact stop lookup
-    * _stops_by_name        - normalized name -> [stop_id, ...] (exact match)
+    * _stop_groups_by_id    - stable group ID -> all platforms with the same name
+    * _stop_group_ids_by_normalized_name - normalized name -> [group_id, ...]
     * _trips_by_id          - exact trip lookup
-    * _trips_by_route       - route_id -> [trip_id, ...]
     * _stop_times_by_trip   - trip_id -> [StopTime, ...] sorted by stop_sequence
     * _departures_by_stop   - stop_id -> [(departure_secs, trip_id, stop_sequence), ...]
                                sorted by departure_secs (binary-searchable with bisect)
@@ -50,6 +50,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
+from hashlib import sha256
 
 from logging_config import logger
 
@@ -132,6 +133,19 @@ class Stop:
 
 
 @dataclass(frozen=True, slots=True)
+class StopGroup:
+    """All platforms with one exact name in a single schedule.
+
+    IDs remain stable across loads and membership changes. Always resolve an
+    ID in the date-selected schedule; matching IDs do not share platform data.
+    """
+
+    group_id: str
+    stop_name: str
+    stop_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Route:
     route_id: str
     agency_id: str
@@ -147,7 +161,6 @@ class Trip:
     service_id: str
     trip_headsign: str
     direction_id: int
-    brigade: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,17 +170,8 @@ class StopTime:
     arrival_secs: int
     departure_secs: int
     stop_sequence: int
-    stop_headsign: str
     pickup_type: int
     drop_off_type: int
-
-    def arrival_dt(self, service_day: date) -> datetime:
-        """Real, wall-clock-correct arrival datetime for a given service day."""
-        return secs_to_datetime(self.arrival_secs, service_day)
-
-    def departure_dt(self, service_day: date) -> datetime:
-        """Real, wall-clock-correct departure datetime for a given service day."""
-        return secs_to_datetime(self.departure_secs, service_day)
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,9 +200,6 @@ class FeedInfo:
     lang: str
     start_date: date
     end_date: date
-
-    def covers(self, day: date) -> bool:
-        return self.start_date <= day <= self.end_date
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,16 +232,15 @@ class ServiceConnectionTemplate:
 class PrecomputedData:
     feed_info: FeedInfo | None = None
     stops_by_id: dict[str, Stop] = field(default_factory=dict)
+    stop_groups_by_id: dict[str, StopGroup] = field(default_factory=dict)
+    stop_group_ids_by_normalized_name: dict[str, list[str]] = field(default_factory=dict)
     routes_by_id: dict[str, Route] = field(default_factory=dict)
     trips_by_id: dict[str, Trip] = field(default_factory=dict)
     services: dict[str, Service] = field(default_factory=dict)
-    stops_by_name: dict[str, list[str]] = field(default_factory=dict)
-    trips_by_route: dict[str, list[str]] = field(default_factory=dict)
     stop_times_by_trip: dict[str, list[StopTime]] = field(default_factory=dict)
     departures_by_stop: dict[str, list[tuple[int, str, int]]] = field(default_factory=dict)
     routes_by_stop: dict[str, set[str]] = field(default_factory=dict)
     stops_by_route: dict[str, dict[int, list[str]]] = field(default_factory=dict)
-    normalized_names: dict[str, list[str]] = field(default_factory=dict)
     connections_by_service_day: dict[date, tuple[ServiceConnectionTemplate, ...]] = field(
         default_factory=dict
     )
@@ -342,9 +342,20 @@ class ZTMStaticSchedule:
                 zone_id=row["zone_id"].strip(),
             )
             data.stops_by_id[stop.stop_id] = stop
-            key = normalize_name(stop.stop_name)
-            data.stops_by_name.setdefault(key, []).append(stop.stop_id)
-            data.normalized_names.setdefault(key, []).append(stop.stop_id)
+
+        stop_ids_by_name: dict[str, list[str]] = {}
+        for stop in data.stops_by_id.values():
+            stop_ids_by_name.setdefault(stop.stop_name, []).append(stop.stop_id)
+
+        for name, stop_ids in stop_ids_by_name.items():
+            group_id = "stop-group:" + sha256(name.encode("utf-8")).hexdigest()
+            data.stop_groups_by_id[group_id] = StopGroup(
+                group_id=group_id,
+                stop_name=name,
+                stop_ids=tuple(sorted(stop_ids)),
+            )
+            key = normalize_name(name)
+            data.stop_group_ids_by_normalized_name.setdefault(key, []).append(group_id)
 
     def _load_routes(self, data: PrecomputedData, rows: list[dict[str, str]]) -> None:
         for row in rows:
@@ -365,10 +376,8 @@ class ZTMStaticSchedule:
                 service_id=row["service_id"].strip(),
                 trip_headsign=row["trip_headsign"].strip(),
                 direction_id=int(row["direction_id"]),
-                brigade=row.get("brigade", "").strip(),
             )
             data.trips_by_id[trip.trip_id] = trip
-            data.trips_by_route.setdefault(trip.route_id, []).append(trip.trip_id)
 
     def _load_calendar(self, data: PrecomputedData, rows: list[dict[str, str]]) -> None:
         if not rows:
@@ -439,7 +448,6 @@ class ZTMStaticSchedule:
                 arrival_secs=hms_to_secs(row["arrival_time"]),
                 departure_secs=hms_to_secs(row["departure_time"]),
                 stop_sequence=int(row["stop_sequence"]),
-                stop_headsign=row["stop_headsign"].strip(),
                 pickup_type=int(row["pickup_type"]),
                 drop_off_type=int(row["drop_off_type"]),
             )
@@ -601,6 +609,21 @@ class ZTMStaticSchedule:
         """Return all stops."""
         return list(self.data.stops_by_id.values())
 
+    def get_stop_group(self, group_id: str) -> StopGroup | None:
+        """Resolve a group ID within this schedule."""
+        return self.data.stop_groups_by_id.get(group_id)
+
+    def get_all_stop_groups(self) -> list[StopGroup]:
+        """Return every group, including those without service on a given day."""
+        return list(self.data.stop_groups_by_id.values())
+
+    def get_stops_for_group(self, group_id: str) -> list[Stop]:
+        """Return the group's complete platform records, or [] for an unknown ID."""
+        group = self.get_stop_group(group_id)
+        if group is None:
+            return []
+        return [self.data.stops_by_id[stop_id] for stop_id in group.stop_ids]
+
     def get_route(self, route_id: str) -> Route | None:
         """Resolve a single route_id to its Route record."""
         return self.data.routes_by_id.get(route_id)
@@ -608,25 +631,6 @@ class ZTMStaticSchedule:
     def get_all_routes(self) -> list[Route]:
         """Return all routes."""
         return list(self.data.routes_by_id.values())
-
-    def get_trip(self, trip_id: str) -> Trip | None:
-        """Resolve a single trip_id to its Trip record."""
-        return self.data.trips_by_id.get(trip_id)
-
-    def get_service(self, service_id: str) -> Service | None:
-        return self.data.services.get(service_id)
-
-    def get_trips_for_route(self, route_id: str, direction_id: int | None = None) -> list[Trip]:
-        """All trips belonging to a route, optionally filtered to one direction."""
-        trip_ids = self.data.trips_by_route.get(route_id, [])
-        trips = [self.data.trips_by_id[tid] for tid in trip_ids if tid in self.data.trips_by_id]
-        if direction_id is not None:
-            trips = [t for t in trips if t.direction_id == direction_id]
-        return trips
-
-    def get_stop_times_for_trip(self, trip_id: str) -> list[StopTime]:
-        """Full ordered itinerary (by stop_sequence) for one trip_id."""
-        return self.data.stop_times_by_trip.get(trip_id, [])
 
     def get_routes_for_stop(self, stop_id: str) -> list[Route]:
         """Every route that calls at a given stop_id."""
@@ -638,17 +642,6 @@ class ZTMStaticSchedule:
         route_id + direction_id, as actual Stop records."""
         stop_ids = self.data.stops_by_route.get(route_id, {}).get(direction_id, [])
         return [self.data.stops_by_id[sid] for sid in stop_ids if sid in self.data.stops_by_id]
-
-    def get_active_services(self, day: date) -> set[str]:
-        """All service_ids running on a given calendar date."""
-        return {sid for sid, svc in self.data.services.items() if svc.runs_on(day)}
-
-    def get_stops_by_name(self, name: str) -> list[Stop]:
-        """Exact (post-normalization) name lookup. Use fuzzy_search_stops
-        for typo-tolerant / partial matching instead."""
-        key = normalize_name(name)
-        ids = self.data.stops_by_name.get(key, [])
-        return [self.data.stops_by_id[i] for i in ids]
 
     # -- searches ---------------------------------------------------
 
@@ -679,7 +672,7 @@ class ZTMStaticSchedule:
 
         scored: dict[str, float] = {}
 
-        for norm_name, stop_ids in self.data.normalized_names.items():
+        for norm_name, group_ids in self.data.stop_group_ids_by_normalized_name.items():
             if norm_name == norm_query:
                 score = 1.0
             elif norm_query in norm_name or norm_name in norm_query:
@@ -689,8 +682,8 @@ class ZTMStaticSchedule:
                 if score < min_score:
                     continue
 
-            for stop_id in stop_ids:
-                if score > scored.get(stop_id, 0.0):
+            for group_id in group_ids:
+                for stop_id in self.data.stop_groups_by_id[group_id].stop_ids:
                     scored[stop_id] = score
 
         ranked = sorted(scored.items(), key=lambda kv: kv[1], reverse=True)[:limit]
@@ -794,30 +787,6 @@ class ZTMStaticSchedule:
             if len(results) >= limit:
                 break
         return results
-
-    def get_trip_summary(self, trip_id: str, service_day: date | None = None) -> list[dict]:
-        """
-        Full summary of a trip, in stop_sequence order. If `service_day`
-        is given, includes real arrival/departure datetimes anchored to
-        that date; otherwise only the raw HH:MM:SS strings are included
-        (since without a date, "25:30:00" can't be turned into a real
-        timestamp).
-        """
-        result = []
-        for st in self.get_stop_times_for_trip(trip_id):
-            stop = self.data.stops_by_id.get(st.stop_id)
-            entry = {
-                "stop_id": st.stop_id,
-                "stop_name": stop.stop_name if stop else None,
-                "arrival_time": secs_to_hms(st.arrival_secs),
-                "departure_time": secs_to_hms(st.departure_secs),
-                "stop_sequence": st.stop_sequence,
-            }
-            if service_day is not None:
-                entry["arrival_datetime"] = st.arrival_dt(service_day).isoformat()
-                entry["departure_datetime"] = st.departure_dt(service_day).isoformat()
-            result.append(entry)
-        return result
 
     def get_route_summary(self, route_id: str) -> dict | None:
         """Route metadata plus both directions' stop patterns -- a common

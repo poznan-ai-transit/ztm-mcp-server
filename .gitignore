@@ -5,4 +5,4 @@ _logs_/
 .env
 node_modules/
 
-results.json
+evals/results/

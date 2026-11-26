@@ -1,0 +1,22 @@
+{
+  "name": "ztm-evals",
+  "version": "1.0.0",
+  "description": "promptfoo evals of LLM agents using the ZTM MCP server. Needs .env with OPENROUTER_API_KEY and the server on localhost:8000.",
+  "scripts": {
+    "eval:single": "promptfoo eval -c single-turn/promptfooconfig.yaml --no-cache -o results/single-turn.json",
+    "eval:single:repeat": "promptfoo eval -c single-turn/promptfooconfig.yaml --no-cache --repeat 5 -o results/single-turn.json",
+    "eval:multi": "promptfoo eval -c multi-step/promptfooconfig.yaml --no-cache -o results/multi-step.json",
+    "eval:multi:repeat": "promptfoo eval -c multi-step/promptfooconfig.yaml --no-cache --repeat 3 -o results/multi-step.json",
+    "report:single": "node lib/report.js results/single-turn.json",
+    "report:multi": "node lib/report.js results/multi-step.json"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "promptfoo": "^0.121.20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2"
+  }
+}
