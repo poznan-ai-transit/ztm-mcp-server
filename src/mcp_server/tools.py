@@ -25,6 +25,7 @@ from services.ztm_connection_search import (
 )
 from services.ztm_realtime_delays import ZTMRealtimeDelays
 from services.ztm_schedule_repository import ScheduleRepository, warsaw_today
+from services.ztm_service_alerts import GTFSAlertsError, ZTMServiceAlerts
 from services.ztm_static_schedule import ZTMStaticSchedule
 
 mcp_tools: FastMCP = FastMCP("ztm-poznan-tools")
@@ -63,6 +64,16 @@ def _get_schedule(ctx: Context, day: calendar_date) -> ZTMStaticSchedule:
         return repository.for_date(day)
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
+
+
+def _get_alerts_service(ctx: Context) -> ZTMServiceAlerts:
+    request_context = ctx.request_context
+    if request_context is None:
+        raise RuntimeError("Tool requires an active MCP request context")
+    service: ZTMServiceAlerts | None = request_context.lifespan_context.get("ztm_service_alerts")
+    if service is None:
+        raise ToolError("Service alerts feed is not available.")
+    return service
 
 
 @mcp_tools.tool()
@@ -414,3 +425,52 @@ def search_connection(
         return value
 
     return [serialize(asdict(connection)) for connection in connections]
+
+
+@mcp_tools.tool()
+def get_service_alerts(
+    route_id: str | None = None,
+    stop_id: StopId | None = None,
+    active_only: bool = True,
+    limit: int = 20,
+    *,
+    ctx: Context,
+) -> list[dict[str, Any]]:
+    """Return ZTM Poznań service alerts (detours, disruptions, stop closures, notices).
+
+    Optional filters:
+    - route_id: filter alerts affecting a specific line (resolve via search_routes first).
+    - stop_id: filter alerts affecting a specific stop (resolve via search_stops first;
+      preserve leading zeros).
+    - active_only: when True (default), returns only alerts currently in effect in
+      Europe/Warsaw; set to False to include scheduled upcoming or recently ended alerts.
+    - limit: integer from 1 to 100 (default 20).
+
+    When both route_id and stop_id are omitted, returns all active network-wide alerts.
+    """
+    logger.debug(
+        "get_service_alerts: route_id=%r stop_id=%r active_only=%r limit=%d",
+        route_id,
+        stop_id,
+        active_only,
+        limit,
+    )
+    _validate_limit(limit)
+
+    if route_id is not None and not route_id.strip():
+        raise ToolError("Invalid route_id. Provide a non-empty route_id or omit it.")
+    if stop_id is not None and not stop_id.strip():
+        raise ToolError("Invalid stop_id. Provide a non-empty stop_id or omit it.")
+
+    alerts_service = _get_alerts_service(ctx)
+    try:
+        alerts = alerts_service.get_alerts(
+            route_id=route_id,
+            stop_id=stop_id,
+            active_only=active_only,
+        )
+    except GTFSAlertsError as exc:
+        raise ToolError(str(exc)) from exc
+
+    logger.debug("get_service_alerts returned %d alerts", len(alerts[:limit]))
+    return [alert.to_dict() for alert in alerts[:limit]]
