@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -10,6 +11,7 @@ from services.ztm_realtime_delays import (
     GTFSRealtimeError,
     ZTMRealtimeDelays,
 )
+from services.ztm_static_schedule import ZTMStaticSchedule
 
 SERVICE_DAY = date(2026, 6, 1)
 
@@ -30,6 +32,57 @@ def realtime_service(sample_schedule):
     return ZTMRealtimeDelays(repository)
 
 
+@pytest.fixture
+def multi_stop_realtime_service(sample_gtfs):
+    gtfs = copy.deepcopy(sample_gtfs)
+    gtfs["trips"].append(
+        {
+            "trip_id": "T_NO_DROP",
+            "route_id": "R1",
+            "service_id": "WKD",
+            "trip_headsign": "Dworzec",
+            "direction_id": "0",
+            "brigade": "",
+        }
+    )
+    gtfs["stop_times"].extend(
+        [
+            {
+                "trip_id": "T_NO_DROP",
+                "stop_id": "S1",
+                "arrival_time": "05:38:00",
+                "departure_time": "05:38:00",
+                "stop_sequence": "0",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+            {
+                "trip_id": "T_NO_DROP",
+                "stop_id": "S2",
+                "arrival_time": "05:43:00",
+                "departure_time": "05:43:00",
+                "stop_sequence": "1",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "1",
+            },
+            {
+                "trip_id": "T_NO_DROP",
+                "stop_id": "S3",
+                "arrival_time": "06:30:00",
+                "departure_time": "06:30:00",
+                "stop_sequence": "2",
+                "stop_headsign": "Dworzec",
+                "pickup_type": "0",
+                "drop_off_type": "0",
+            },
+        ]
+    )
+    repository = FakeScheduleRepository(ZTMStaticSchedule.load(gtfs))
+    return ZTMRealtimeDelays(repository)
+
+
 def make_feed(
     *,
     trip_id: str = "T1",
@@ -39,6 +92,7 @@ def make_feed(
     departure_delay: int | None = None,
     stop_relationship: str | None = None,
     trip_relationship: str | None = None,
+    vehicle_id: str | None = None,
 ) -> gtfs_realtime_pb2.FeedMessage:
     """Build a small GTFS-RT feed containing one trip update."""
 
@@ -50,6 +104,8 @@ def make_feed(
 
     trip_update = entity.trip_update
     trip_update.timestamp = feed.header.timestamp
+    if vehicle_id is not None:
+        trip_update.vehicle.id = vehicle_id
 
     trip = trip_update.trip
     trip.trip_id = trip_id
@@ -76,6 +132,26 @@ def make_feed(
                 stop_relationship
             )
         )
+
+    return feed
+
+
+def make_vehicle_positions_feed(
+    vehicles: list[tuple[str, str | None, str]],
+) -> gtfs_realtime_pb2.FeedMessage:
+    """Build a GTFS-RT VehiclePosition feed from ``(trip_id, start_date, vehicle_id)`` tuples."""
+
+    feed = gtfs_realtime_pb2.FeedMessage()
+    feed.header.timestamp = int(datetime(2026, 6, 1, 5, 30, tzinfo=POZNAN_TZ).timestamp())
+
+    for idx, (trip_id, start_date, vehicle_id) in enumerate(vehicles):
+        entity = feed.entity.add()
+        entity.id = f"vp-{idx}"
+        vp = entity.vehicle
+        vp.trip.trip_id = trip_id
+        if start_date:
+            vp.trip.start_date = start_date
+        vp.vehicle.id = vehicle_id
 
     return feed
 
@@ -338,6 +414,102 @@ def test_unknown_trip_is_ignored(realtime_service):
 
 
 # ---------------------------------------------------------------------------
+# Vehicle position mapping tests
+# ---------------------------------------------------------------------------
+
+
+def test_get_vehicle_id_from_vehicle_positions_without_delays(realtime_service):
+    """Vehicle positions should map trips to vehicle_id even when no trip updates exist."""
+
+    empty_tu_feed = gtfs_realtime_pb2.FeedMessage()
+    vp_feed = make_vehicle_positions_feed(
+        [
+            ("T1", SERVICE_DAY.strftime("%Y%m%d"), "3011"),
+            ("3_9999", None, "3022"),
+        ]
+    )
+
+    snapshot = realtime_service._build_snapshot(empty_tu_feed, vp_feed)
+    with realtime_service._snapshot_lock:
+        realtime_service._snapshot = snapshot
+
+    assert realtime_service.get_trip_updates("T1", SERVICE_DAY) is None
+    assert realtime_service.get_vehicle_id("T1", SERVICE_DAY) == "3011"
+    # Base trip_id before '^' suffix resolves when start_date was omitted
+    assert realtime_service.get_vehicle_id("3_9999^N+", SERVICE_DAY) == "3022"
+    assert realtime_service.get_vehicle_id("T3", SERVICE_DAY) is None
+
+
+# ---------------------------------------------------------------------------
+# Delay propagation tests
+# ---------------------------------------------------------------------------
+
+
+def test_delay_propagates_to_subsequent_stops(multi_stop_realtime_service):
+    """A delay at an earlier stop sequence should propagate forward to omitted stops."""
+
+    # T_NO_DROP has 3 stops: seq 0 (S1 05:38), seq 1 (S2 05:43), seq 2 (S3 06:30)
+    feed = make_feed(
+        trip_id="T_NO_DROP",
+        stop_sequence=0,
+        arrival_delay=180,
+    )
+
+    snapshot = multi_stop_realtime_service._build_snapshot(feed)
+    with multi_stop_realtime_service._snapshot_lock:
+        multi_stop_realtime_service._snapshot = snapshot
+
+    seq0 = multi_stop_realtime_service.get_stop_update("T_NO_DROP", 0, SERVICE_DAY)
+    assert seq0 is not None
+    assert seq0.departure_delay == 180
+
+    seq1 = multi_stop_realtime_service.get_stop_update("T_NO_DROP", 1, SERVICE_DAY)
+    assert seq1 is not None
+    assert seq1.stop_id == "S2"
+    assert seq1.arrival_delay == 180
+    assert seq1.departure_delay == 180
+    assert seq1.departure_delay_estimated is True
+    assert seq1.predicted_arrival == datetime(2026, 6, 1, 5, 46, tzinfo=POZNAN_TZ)
+    assert seq1.predicted_departure == datetime(2026, 6, 1, 5, 46, tzinfo=POZNAN_TZ)
+
+    seq2 = multi_stop_realtime_service.get_stop_update("T_NO_DROP", 2, SERVICE_DAY)
+    assert seq2 is not None
+    assert seq2.stop_id == "S3"
+    assert seq2.departure_delay == 180
+    assert seq2.predicted_departure == datetime(2026, 6, 1, 6, 33, tzinfo=POZNAN_TZ)
+
+
+def test_no_data_clears_downstream_delay_propagation(multi_stop_realtime_service):
+    """A NO_DATA stop update should stop propagating earlier delays downstream."""
+
+    feed = gtfs_realtime_pb2.FeedMessage()
+    entity = feed.entity.add()
+    entity.id = "vehicle-1"
+
+    tu = entity.trip_update
+    tu.trip.trip_id = "T_NO_DROP"
+    tu.trip.route_id = "R1"
+    tu.trip.start_date = SERVICE_DAY.strftime("%Y%m%d")
+
+    stu0 = tu.stop_time_update.add()
+    stu0.stop_sequence = 0
+    stu0.arrival.delay = 240
+
+    stu1 = tu.stop_time_update.add()
+    stu1.stop_sequence = 1
+    stu1.schedule_relationship = (
+        gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.ScheduleRelationship.Value("NO_DATA")
+    )
+
+    snapshot = multi_stop_realtime_service._build_snapshot(feed)
+    with multi_stop_realtime_service._snapshot_lock:
+        multi_stop_realtime_service._snapshot = snapshot
+
+    # Sequence 2 follows sequence 1 (NO_DATA) -> should not inherit sequence 0's delay
+    assert multi_stop_realtime_service.get_stop_update("T_NO_DROP", 2, SERVICE_DAY) is None
+
+
+# ---------------------------------------------------------------------------
 # Snapshot access tests
 # ---------------------------------------------------------------------------
 
@@ -393,17 +565,24 @@ def test_snapshot_is_immutable(realtime_service):
 
 def test_refresh_replaces_snapshot(realtime_service, monkeypatch):
     feed = make_feed(arrival_delay=60)
+    vp_feed = make_vehicle_positions_feed([("T1", SERVICE_DAY.strftime("%Y%m%d"), "3011")])
 
     monkeypatch.setattr(
         realtime_service,
         "fetch_feed",
         lambda: feed,
     )
+    monkeypatch.setattr(
+        realtime_service,
+        "fetch_vehicle_positions",
+        lambda: vp_feed,
+    )
 
     snapshot = realtime_service.refresh()
 
     assert realtime_service.snapshot is snapshot
     assert ("T1", SERVICE_DAY) in snapshot.trips
+    assert realtime_service.get_vehicle_id("T1", SERVICE_DAY) == "3011"
 
 
 def test_refresh_preserves_previous_snapshot_on_failure(
@@ -413,11 +592,17 @@ def test_refresh_preserves_previous_snapshot_on_failure(
     """A failed refresh must not discard the last good snapshot."""
 
     feed = make_feed(arrival_delay=60)
+    vp_feed = make_vehicle_positions_feed([])
 
     monkeypatch.setattr(
         realtime_service,
         "fetch_feed",
         lambda: feed,
+    )
+    monkeypatch.setattr(
+        realtime_service,
+        "fetch_vehicle_positions",
+        lambda: vp_feed,
     )
 
     previous_snapshot = realtime_service.refresh()

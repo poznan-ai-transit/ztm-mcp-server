@@ -32,6 +32,7 @@ async def ztm_service_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]
         yield {
             "ztm_static_storage": ztm_service.repository,
             "ztm_realtime_delays": realtime_service,
+            "ztm_vehicle_catalog": ztm_service.vehicle_catalog,
             "ztm_service_alerts": alerts_service,
         }
     finally:

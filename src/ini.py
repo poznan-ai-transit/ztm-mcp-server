@@ -9,6 +9,7 @@ class Ini:
     server_port: int = 8000
     gtfs_endpoint: str = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
     gtfs_archives_url: str = "https://www.ztm.poznan.pl/otwarte-dane/gtfsfiles/"
+    gtfs_rt_endpoint: str = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile"
     gtfs_history_days: int = 7
     request_timeout_seconds: float = 30
     refresh_retry_initial_seconds: int = 60

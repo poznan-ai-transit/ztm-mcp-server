@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from types import MappingProxyType
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
@@ -68,6 +69,10 @@ class RealtimeTripUpdate:
     timestamp: datetime | None
     stop_updates: tuple[RealtimeStopUpdate, ...]
     trip_schedule_relationship: str
+    vehicle_id: str | None = None
+
+
+_EMPTY_MAPPING: Mapping[Any, Any] = MappingProxyType({})
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +80,9 @@ class RealtimeSnapshot:
     fetched_at: datetime
     feed_timestamp: datetime | None
     trips: Mapping[tuple[str, date], RealtimeTripUpdate]
+    vehicles_by_trip: Mapping[tuple[str, date], str] = field(default_factory=lambda: _EMPTY_MAPPING)
+    vehicles_by_trip_id: Mapping[str, str] = field(default_factory=lambda: _EMPTY_MAPPING)
+    vehicles_by_base_trip_id: Mapping[str, str] = field(default_factory=lambda: _EMPTY_MAPPING)
 
 
 # ---------------------------------------------------------------------------
@@ -100,24 +108,30 @@ class ZTMRealtimeDelays:
     # Fetching
     # -----------------------------------------------------------------------
 
-    def fetch_feed(self) -> gtfs_realtime_pb2.FeedMessage:
-        """Download and parse the current GTFS-Realtime trip updates."""
-
+    def _fetch_pb_file(self, filename: str) -> gtfs_realtime_pb2.FeedMessage:
         try:
             response = requests.get(
                 self.RT_ENDPOINT,
-                params={"file": "trip_updates.pb"},
+                params={"file": filename},
                 timeout=ini.request_timeout_seconds,
             )
             response.raise_for_status()
 
             feed = gtfs_realtime_pb2.FeedMessage()
             feed.ParseFromString(response.content)
-
             return feed
-
         except Exception as exc:
-            raise GTFSRealtimeError(f"Unable to fetch GTFS-Realtime feed: {exc}") from exc
+            raise GTFSRealtimeError(
+                f"Unable to fetch GTFS-Realtime feed {filename}: {exc}"
+            ) from exc
+
+    def fetch_feed(self) -> gtfs_realtime_pb2.FeedMessage:
+        """Download and parse the current GTFS-Realtime trip updates."""
+        return self._fetch_pb_file("trip_updates.pb")
+
+    def fetch_vehicle_positions(self) -> gtfs_realtime_pb2.FeedMessage:
+        """Download and parse the current GTFS-Realtime vehicle positions."""
+        return self._fetch_pb_file("vehicle_positions.pb")
 
     # -----------------------------------------------------------------------
     # Loading
@@ -127,29 +141,60 @@ class ZTMRealtimeDelays:
         """
         Fetch realtime data and atomically replace the current snapshot.
 
-        If fetching or parsing fails, the previous snapshot remains available.
+        If fetching or parsing trip updates fails, the previous snapshot remains available.
         """
         with self._refresh_lock:
-            logger.info("Fetching ZTM realtime delays")
+            logger.info("Fetching ZTM realtime delays and vehicle positions")
 
             feed = self.fetch_feed()
-            new_snapshot = self._build_snapshot(feed)
+            vehicle_feed: gtfs_realtime_pb2.FeedMessage | None = None
+            try:
+                vehicle_feed = self.fetch_vehicle_positions()
+            except GTFSRealtimeError:
+                logger.warning(
+                    "Unable to fetch vehicle_positions.pb; continuing with trip updates only"
+                )
+
+            new_snapshot = self._build_snapshot(feed, vehicle_feed)
 
             with self._snapshot_lock:
                 self._snapshot = new_snapshot
 
             logger.info(
-                "Realtime delays refreshed: %s trips",
+                "Realtime refreshed: %s trips, %s active trip-vehicle mappings",
                 len(new_snapshot.trips),
+                len(new_snapshot.vehicles_by_trip),
             )
 
             return new_snapshot
 
+    @staticmethod
+    def _resolve_service_day(
+        descriptor: gtfs_realtime_pb2.TripDescriptor,
+        default_day: date,
+    ) -> date | None:
+        if descriptor.start_date:
+            try:
+                return datetime.strptime(descriptor.start_date, "%Y%m%d").date()
+            except ValueError:
+                logger.warning(
+                    "Invalid GTFS-RT start_date %r for trip %s",
+                    descriptor.start_date,
+                    descriptor.trip_id,
+                )
+                return None
+        return default_day
+
+    @staticmethod
+    def _base_trip_id(trip_id: str) -> str:
+        return trip_id.split("^", 1)[0]
+
     def _build_snapshot(
         self,
         feed: gtfs_realtime_pb2.FeedMessage,
+        vehicle_feed: gtfs_realtime_pb2.FeedMessage | None = None,
     ) -> RealtimeSnapshot:
-        """Join realtime trip updates with the static schedule for each service day."""
+        """Join realtime trip updates and vehicle positions with the static schedule."""
 
         feed_timestamp = None
         if feed.HasField("header") and feed.header.HasField("timestamp"):
@@ -157,6 +202,32 @@ class ZTMRealtimeDelays:
                 feed.header.timestamp,
                 tz=POZNAN_TZ,
             )
+
+        today_local = datetime.now(POZNAN_TZ).date()
+        vehicles_by_trip: dict[tuple[str, date], str] = {}
+        vehicles_by_trip_id: dict[str, str] = {}
+        vehicles_by_base_trip_id: dict[str, str] = {}
+
+        if vehicle_feed is not None:
+            for entity in vehicle_feed.entity:
+                if not entity.HasField("vehicle"):
+                    continue
+                vehicle_pos = entity.vehicle
+                if not vehicle_pos.HasField("trip") or not vehicle_pos.HasField("vehicle"):
+                    continue
+
+                trip_id = vehicle_pos.trip.trip_id.strip()
+                vehicle_id = vehicle_pos.vehicle.id.strip()
+                if not trip_id or not vehicle_id:
+                    continue
+
+                service_day = self._resolve_service_day(vehicle_pos.trip, today_local)
+                if service_day is None:
+                    continue
+
+                vehicles_by_trip[(trip_id, service_day)] = vehicle_id
+                vehicles_by_trip_id[trip_id] = vehicle_id
+                vehicles_by_base_trip_id[self._base_trip_id(trip_id)] = vehicle_id
 
         trips: dict[tuple[str, date], RealtimeTripUpdate] = {}
 
@@ -171,28 +242,15 @@ class ZTMRealtimeDelays:
             if not trip_id:
                 continue
 
-            # GTFS-RT start_date identifies the service day.
-            # The fallback is appropriate for a current-day feed, but see note below.
-            if descriptor.start_date:
-                try:
-                    service_day = datetime.strptime(
-                        descriptor.start_date,
-                        "%Y%m%d",
-                    ).date()
-                except ValueError:
-                    logger.warning(
-                        "Invalid GTFS-RT start_date %r for trip %s",
-                        descriptor.start_date,
-                        trip_id,
-                    )
-                    continue
-            else:
-                service_day = datetime.now(POZNAN_TZ).date()
-                logger.debug(
-                    "GTFS-RT trip %s has no start_date; assuming service day %s",
-                    trip_id,
-                    service_day,
-                )
+            service_day = self._resolve_service_day(descriptor, today_local)
+            if service_day is None:
+                continue
+
+            # Extract vehicle_id from trip_update if present, and backfill vehicles_by_trip.
+            tu_vehicle_id: str | None = None
+            if trip_update.HasField("vehicle") and trip_update.vehicle.id.strip():
+                tu_vehicle_id = trip_update.vehicle.id.strip()
+                vehicles_by_trip.setdefault((trip_id, service_day), tu_vehicle_id)
 
             # Each trip may belong to a different static GTFS archive.
             try:
@@ -301,7 +359,7 @@ class ZTMRealtimeDelays:
                     else "SCHEDULED"
                 )
 
-                # Retain SKIPPED and other meaningful relationship-only updates.
+                # Retain SKIPPED, NO_DATA, and meaningful prediction updates.
                 if arrival is None and departure is None and stop_relationship == "SCHEDULED":
                     continue
 
@@ -354,12 +412,16 @@ class ZTMRealtimeDelays:
                 ),
                 stop_updates=tuple(sorted(updates, key=lambda item: item.stop_sequence)),
                 trip_schedule_relationship=trip_relationship,
+                vehicle_id=vehicles_by_trip.get(key) or tu_vehicle_id,
             )
 
         return RealtimeSnapshot(
             fetched_at=datetime.now(POZNAN_TZ),
             feed_timestamp=feed_timestamp,
             trips=MappingProxyType(trips),
+            vehicles_by_trip=MappingProxyType(vehicles_by_trip),
+            vehicles_by_trip_id=MappingProxyType(vehicles_by_trip_id),
+            vehicles_by_base_trip_id=MappingProxyType(vehicles_by_base_trip_id),
         )
 
     # -----------------------------------------------------------------------
@@ -429,6 +491,21 @@ class ZTMRealtimeDelays:
         with self._snapshot_lock:
             return self._snapshot
 
+    def get_vehicle_id(
+        self,
+        trip_id: str,
+        service_date: date,
+    ) -> str | None:
+        """Return the live vehicle ID assigned to (trip_id, service_date), even with no delay."""
+        snapshot = self.snapshot
+        if snapshot is None:
+            return None
+        return (
+            snapshot.vehicles_by_trip.get((trip_id, service_date))
+            or snapshot.vehicles_by_trip_id.get(trip_id)
+            or snapshot.vehicles_by_base_trip_id.get(self._base_trip_id(trip_id))
+        )
+
     def get_trip_updates(
         self,
         trip_id: str,
@@ -482,20 +559,82 @@ class ZTMRealtimeDelays:
         stop_sequence: int,
         service_date: date,
     ) -> RealtimeStopUpdate | None:
-        """Get the realtime update for a specific trip stop and service day."""
+        """Get the realtime update for a specific trip stop and service day.
 
+        Follows GTFS-Realtime propagation rules: if no explicit update exists
+        for ``stop_sequence``, the delay from the latest preceding stop update
+        on the same trip is propagated forward unless cleared by ``NO_DATA``.
+        """
         trip_update = self.get_trip_updates(trip_id, service_date)
-
         if trip_update is None:
             return None
 
-        return next(
+        preceding_update: RealtimeStopUpdate | None = None
+        for update in trip_update.stop_updates:
+            if update.stop_sequence == stop_sequence:
+                return update
+            if update.stop_sequence < stop_sequence:
+                preceding_update = update
+            else:
+                break
+
+        if preceding_update is None:
+            return None
+
+        if preceding_update.schedule_relationship == "NO_DATA":
+            return None
+
+        propagated_delay = (
+            preceding_update.departure_delay
+            if preceding_update.departure_delay is not None
+            else preceding_update.arrival_delay
+        )
+        if propagated_delay is None:
+            return None
+
+        try:
+            schedule = self.repository.for_date(service_date)
+        except ValueError:
+            return None
+
+        data = schedule.data
+        static_stop = next(
             (
-                update
-                for update in trip_update.stop_updates
-                if update.stop_sequence == stop_sequence
+                st
+                for st in data.stop_times_by_trip.get(trip_id, ())
+                if st.stop_sequence == stop_sequence
             ),
             None,
+        )
+        if static_stop is None:
+            return None
+
+        stop = data.stops_by_id.get(static_stop.stop_id)
+        scheduled_arrival_dt = self._scheduled_datetime(
+            static_stop.arrival_secs,
+            service_date,
+        )
+        scheduled_departure_dt = self._scheduled_datetime(
+            static_stop.departure_secs,
+            service_date,
+        )
+        delay_delta = timedelta(seconds=propagated_delay)
+
+        return RealtimeStopUpdate(
+            trip_id=trip_id,
+            route_id=trip_update.route_id,
+            route_short_name=trip_update.route_short_name,
+            stop_id=static_stop.stop_id,
+            stop_name=stop.stop_name if stop else None,
+            stop_sequence=stop_sequence,
+            scheduled_arrival=secs_to_hms(static_stop.arrival_secs),
+            scheduled_departure=secs_to_hms(static_stop.departure_secs),
+            predicted_arrival=scheduled_arrival_dt + delay_delta,
+            predicted_departure=scheduled_departure_dt + delay_delta,
+            arrival_delay=propagated_delay,
+            departure_delay=propagated_delay,
+            departure_delay_estimated=True,
+            schedule_relationship="SCHEDULED",
         )
 
     # -----------------------------------------------------------------------

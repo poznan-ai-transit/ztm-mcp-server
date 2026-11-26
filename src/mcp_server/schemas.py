@@ -4,7 +4,7 @@ TypedDict keeps responses as ordinary dictionaries while giving FastMCP concrete
 JSON schemas. All fields are required; only explicitly nullable fields allow null.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 from typing_extensions import TypedDict
@@ -90,6 +90,8 @@ class ScheduledDeparture(TypedDict):
     realtime_departure_datetime: str | None
     realtime_status: str | None
     cancelled: bool
+    vehicle_id: str | None
+    accessibility: dict[str, Any] | None
 
 
 class DeparturesResponse(TypedDict):
