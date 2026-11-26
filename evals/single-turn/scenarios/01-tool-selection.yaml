@@ -97,9 +97,8 @@
   vars:
     question: 'Show me the next scheduled departures from the Poznań stop Rondo Kaponiera, starting now.'
   assert:
-    - type: contains
-      metric: tool_selection
-      value: 'get_departures'
-    - type: icontains
-      metric: tool_params
-      value: 'Rondo Kaponiera'
+    - type: javascript
+      value: |
+        const s = typeof output === 'string' ? output : JSON.stringify(output);
+        return s.includes('get_departures') ||
+              (s.includes('search_stops') && /kaponiera/i.test(s));

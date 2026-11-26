@@ -1,0 +1,63 @@
+# Mode 1: basic tool chains (stop -> route -> departures).
+# Questions name the platform by stop_code (e.g. RKAP72): same-name platforms are not grouped yet.
+# Test data (verified against the live MCP server):
+#   Rondo Kaponiera, platform RKAP72 (stop_id 1770) -> routes 15, 11 (dense timetable)
+#   Rondo Kaponiera, platform RKAP71 (stop_id 1769) -> line 15 towards Junikowo, via Bułgarska Enea Stadion
+#   The dataset window rolls (2026-11-22 .. 2026-12-05 on 2026-11-22): shift the dates when it moves.
+#   Using 2026-11-24 (Tuesday) at 12:00.
+
+- description: M1 Stop -> route -> departures (all details given)
+  metadata: { mode: 1 }
+  vars:
+    question: 'Show departures of line 15 from stop Rondo Kaponiera, platform RKAP72, on 2026-11-24 at 12:00.'
+  assert:
+    - type: javascript
+      value: |
+        // Both lookups must happen before get_departures.
+        const n = context.providerResponse.metadata.toolCalls.map(c => c.name);
+        const d = n.indexOf('get_departures');
+        return d !== -1
+          && n.indexOf('search_stops') !== -1 && n.indexOf('search_stops') < d
+          && n.indexOf('search_routes') !== -1 && n.indexOf('search_routes') < d;
+    - type: javascript
+      value: |
+        // The model must pass stop_id (1770), not the stop_code (RKAP72).
+        const d = context.providerResponse.metadata.toolCalls.find(c => c.name === 'get_departures');
+        return String(d?.args?.stop_id) === '1770';
+    - type: javascript
+      value: file://../lib/assertions.js:idsFromSearch
+    - type: javascript
+      value: file://../lib/assertions.js:noInventedTimes
+
+- description: M2 Stop -> routes for stop -> departures
+  metadata: { mode: 1 }
+  vars:
+    question: 'Which lines serve stop Rondo Kaponiera, platform RKAP72? Then show departures of line 15 on 2026-11-24 at 12:00.'
+  assert:
+    - type: javascript
+      value: |
+        // Expected order: search_stops -> get_routes_for_stop -> get_departures.
+        const n = context.providerResponse.metadata.toolCalls.map(c => c.name);
+        const s = n.indexOf('search_stops');
+        const r = n.indexOf('get_routes_for_stop');
+        const d = n.indexOf('get_departures');
+        return s !== -1 && r > s && d > r;
+    - type: javascript
+      value: file://../lib/assertions.js:idsFromSearch
+    - type: javascript
+      value: file://../lib/assertions.js:noInventedTimes
+
+- description: M3 Getting to the stadium
+  metadata: { mode: 1 }
+  vars:
+    question: 'I am at Rondo Kaponiera, platform RKAP71, and want to get to Bułgarska Enea Stadion by line 15. When does it leave on 2026-11-24 at 12:00?'
+  assert:
+    - type: javascript
+      value: |
+        // stop_id 1769 must come from the search result, not from the stop_code.
+        const d = context.providerResponse.metadata.toolCalls.find(c => c.name === 'get_departures');
+        return String(d?.args?.stop_id) === '1769';
+    - type: javascript
+      value: file://../lib/assertions.js:idsFromSearch
+    - type: javascript
+      value: file://../lib/assertions.js:noInventedTimes
