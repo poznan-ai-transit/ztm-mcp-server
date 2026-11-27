@@ -21,8 +21,8 @@ pip install -r requirements.txt
 ```bash
 python src/main.py
 python src/main.py --schedule-url                  # dev: today's schedule
-python src/main.py --schedule-url URL              # dev: download GTFS ZIP
-python src/main.py --schedule-file ./schedule.zip  # dev: local GTFS ZIP
+python src/main.py --schedule-url https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile  # dev: download GTFS ZIP
+python src/main.py --schedule-file src/mock_data/mock_data.zip  # dev: local GTFS ZIP
 ```
 
 Test with MCP Inspector:
