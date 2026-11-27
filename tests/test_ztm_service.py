@@ -22,11 +22,50 @@ from services.ztm_static_schedule import ZTMStaticSchedule
 
 
 def test_instance_returns_same_object():
+    ZTMService.initialize()
     assert ZTMService.instance() is ZTMService.instance()
 
 
-def test_constructor_and_instance_share_singleton():
-    assert ZTMService() is ZTMService.instance()
+def test_constructor_requires_explicit_initialization():
+    with pytest.raises(TypeError, match="Use ZTMService.initialize"):
+        ZTMService()
+
+
+def test_instance_requires_initialization():
+    with pytest.raises(RuntimeError, match="not initialized"):
+        ZTMService.instance()
+
+
+def test_instance_keeps_source_when_retrieving_configured_service():
+    ZTMService.initialize(schedule_url="https://example.test/feed")
+    service = ZTMService.instance()
+
+    assert ZTMService.instance() is service
+    assert service._schedule_url == "https://example.test/feed"
+
+
+@pytest.mark.parametrize("schedule_url", [None, "https://example.test/feed"])
+def test_service_cannot_be_initialized_twice(schedule_url):
+    ZTMService.initialize()
+    service = ZTMService.instance()
+
+    with pytest.raises(RuntimeError, match="already initialized"):
+        ZTMService.initialize(schedule_url=schedule_url)
+
+    assert ZTMService.instance() is service
+
+
+def test_failed_initialization_does_not_publish_service(tmp_path):
+    with pytest.raises(ValueError, match="Choose either a schedule URL or a local file"):
+        ZTMService.initialize(
+            schedule_url="https://example.test/feed", schedule_file=tmp_path / "feed.zip"
+        )
+
+    with pytest.raises(RuntimeError, match="not initialized"):
+        ZTMService.instance()
+
+    ZTMService.initialize(schedule_url="")
+    assert ZTMService.instance()._schedule_url == ""
 
 
 # --------------------------------------------------------------------------- #
@@ -36,6 +75,7 @@ def test_constructor_and_instance_share_singleton():
 
 @pytest.fixture
 def service() -> ZTMService:
+    ZTMService.initialize()
     return ZTMService.instance()
 
 

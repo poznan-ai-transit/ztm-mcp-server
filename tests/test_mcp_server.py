@@ -222,7 +222,13 @@ def _resolve_schema(root: dict, node: dict) -> dict:
 def test_new_tools_through_mcp(sample_gtfs, monkeypatch):
     schedule = ZTMStaticSchedule.load(sample_gtfs)
 
-    ZTMService.instance().repository = _repository_with(schedule)
+    initialize = ZTMService.initialize
+
+    def initialize_with_repository(**kwargs):
+        initialize(**kwargs)
+        ZTMService.instance().repository = _repository_with(schedule)
+
+    monkeypatch.setattr(ZTMService, "initialize", initialize_with_repository)
     monkeypatch.setattr(ZTMService, "start_daily_refresh", lambda self: None)
     monkeypatch.setattr(ZTMService, "stop_daily_refresh", lambda self: None)
 

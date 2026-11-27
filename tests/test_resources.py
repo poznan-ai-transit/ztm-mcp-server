@@ -63,7 +63,13 @@ def test_resource_rejects_date_outside_loaded_feeds(repository):
 
 
 def test_dated_resource_through_mcp(repository, monkeypatch):
-    ZTMService.instance().repository = repository
+    initialize = ZTMService.initialize
+
+    def initialize_with_repository(**kwargs):
+        initialize(**kwargs)
+        ZTMService.instance().repository = repository
+
+    monkeypatch.setattr(ZTMService, "initialize", initialize_with_repository)
     monkeypatch.setattr(ZTMService, "start_daily_refresh", lambda self: None)
     monkeypatch.setattr(ZTMService, "stop_daily_refresh", lambda self: None)
 
